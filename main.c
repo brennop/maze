@@ -38,54 +38,57 @@ struct Player{
 
 int input();
 int game();
+int ** genMap();
 void enter();
+void walk();
+void render();
 struct Player create();
 
 int main(){
     srand(time(NULL));
 
     //struct Player player = create();
+    struct Player player; // empty player for debugging
+    player.x = 15;
+    player.y = 15;
 
-    game();
+    game(player);
 }
 
-int game(){
-    int map[30][30], opt;
+int game(struct Player player){
+    int **map, opt;
 
-    for(int i = 0; i < 10; i++){
-        for(int j = 0; j < 10; j++){
-            map[i][j] = rand() % 3 - 1;
-        }
-    }
-
+    map = genMap(30);
 
     while(1 == 1){
 
-        system(CLEAR);
-        for(int i = 0; i < 10; i++){
-            for(int j = 0; j < 10; j++){
-                switch (map[i][j])
-                {
-                case 1:
-                    printf("#");
-                    break;
-                case -1:
-                    printf("@");
-                    break;
-                default:
-                    printf(" ");
-                    break;
-                }
-            }
-            printf("\n");
-        }
+        render(player.x, player.y, map);
         
         switch (getch()){
             case -1: //EOF
                 exit(0);
                 break;
-            case 65:
-                map[0][1]++;
+
+            case 'A': // UP
+                if(map[player.y-1][player.x] == 0){
+                    player.y--;
+                }
+                break;
+
+            case 'B': // Down
+                if(map[player.y+1][player.x] == 0){
+                    player.y++;
+                }
+                break;
+            case 'C': // rigth
+                if(map[player.y][player.x+1] == 0){
+                    player.x++;
+                }
+                break;
+            case 'D': //left
+                if(map[player.y][player.x-1] == 0){
+                    player.x--;
+                }
                 break;
             default:
                 break;
@@ -174,3 +177,99 @@ struct Player create(){
     
 }
 
+void render(int x, int y, int ** map){
+    system(CLEAR);
+
+    // 
+    for(int i = y-2; i < y+3; i++){
+        for(int j = x-2; j < x+3; j++){
+            if(i == y && j == x){
+                printf("@");
+            }else{
+            switch (map[i][j])
+                {
+                case 1:
+                    printf("#");
+                    break;
+                case -1:
+                    printf("@");
+                    break;
+                default:
+                    printf(" ");
+                    break;
+                }
+            }
+        }
+        printf("\n");
+    }
+}
+
+
+/* 
+
+    Geração do Labirinto 
+    Implementação de Recursive Backtracker
+
+*/
+
+int ** genMap(int size){
+    int ** grid;
+
+    // Aloca e cria uma matriz de paredes ("1")
+    grid = (int **) malloc(size * sizeof(int*));
+    for(int i = 0; i < size; i++){
+        grid[i] = (int *) malloc(size * sizeof(int));
+        for(int j = 0; j < size; j++){
+            grid[i][j] = 1;
+        }
+    }
+
+    // começa com a célula do meio do labirinto
+    walk(size/2, size/2, grid, size);
+
+    return grid;
+
+}
+
+void walk(int x, int y, int ** grid, int size){
+    grid[x][y] = 0; // Marca a célula atual como visitada
+    
+    for(int i = 0; i < 4; i++){ // para cada direção ( não vai na direção que veio )
+        int neighbours[4]; // Vetor de vizinhos possíveis
+        int k = 0; // Tamanho do vetor de vizinhos
+
+        // Testa em cada direção se é um vizinho possível
+        // se for um candidato, guarda a posição "contígua" na matriz
+
+        if(y - 2 > 0 && grid[x][y - 2] != 0){ //up
+            neighbours[k] = x + size * (y - 2);
+            k++;
+        }
+        if(x - 2 > 0 && grid[x - 2][y] != 0){ // left
+            neighbours[k] = x - 2 + size * y;
+            k++;
+        }
+        if(y + 2 < size -1 && grid[x][y + 2] != 0){ // down
+            neighbours[k] = x + size * (y + 2);
+            k++;
+        }
+        if(x + 2 < size -1 && grid[x + 2][y] != 0){ // right
+            neighbours[k] = x + 2 + size * y;
+            k++;
+        }
+
+        if(k > 0){ // se há vizinhos disponíveis
+            // escolhe um vizinho aleatóriamente
+            int r = rand() % k;
+
+            // traduz as posições contíguas em coordenadas
+            int next_x = neighbours[r] % size, next_y = neighbours[r] / size; 
+
+            // remove a parede
+            grid[(next_x + x)/2][(y + next_y) / 2] = 0; 
+
+            // anda para a próxima célula
+            walk(next_x, next_y, grid, size); 
+        }
+    }
+}
