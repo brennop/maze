@@ -3,8 +3,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define rows 15
-#define cols 15
+#define rows 33
+#define cols 33
 
 void shuffle(int *array, size_t n)
 {
@@ -24,7 +24,12 @@ void shuffle(int *array, size_t n)
 void recursion(int x, int y, int grid[rows][cols]){
     int dirs[4] = {0,1,2,3};
     shuffle(dirs, 4);
-    grid[x][y] = 0;
+    
+    for(int i =y-1; i < y+2;i++){
+        for(int j = x-1; j < x+2; j++){
+            grid[j][i] = 0;
+        }
+    }
 
     system("clear");
     for(int i = 0; i < rows; i++){
@@ -52,43 +57,47 @@ void recursion(int x, int y, int grid[rows][cols]){
         switch (dirs[i])
         {
         case 0: // up
-            if(y - 2 <= 0)
+            if(y - 4 <= 0)
                 continue;
-            if(grid[x][y-2] != 0){
-                grid[x][y-2] = 0;
-                grid[x][y-1] =0;
-                recursion(x, y-2, grid);
+            if(grid[x][y-4] != 0){
+                for(int i = x-1; i < x+2; i++){
+                    grid[i][y-2] =0;
+                }
+                recursion(x, y-4, grid);
             }
             break;
 
         case 1: // Right
-            if(x + 2 >= cols - 1)
+            if(x + 4 >= cols - 1)
                 continue;
-            if(grid[x +2][y] != 0){
-                grid[x + 2][y] = 0;
-                grid[x + 1][y] = 0;
-                recursion(x + 2, y, grid);
+            if(grid[x +4][y] != 0){
+                for(int i = y-1; i < y+2; i++){
+                    grid[x+2][i] =0;
+                }
+                recursion(x + 4, y, grid);
             }
             break;
 
         case 2: // down
-            if(y + 2 >= rows - 1)
+            if(y + 4 >= rows - 1)
                 continue;
-            if(grid[x][y+2] != 0){
-                grid[x][y+2] = 0;
-                grid[x][y+1] =0;
-                recursion(x, y+2, grid);
+            if(grid[x][y+4] != 0){
+                for(int i = x-1; i < x+2; i++){
+                    grid[i][y+2] =0;
+                }
+                recursion(x, y+4, grid);
             }
             break;
 
         
         case 3: // Left
-            if(x - 2 <= 0)
+            if(x - 4 <= 0)
                 continue;
-            if(grid[x -2][y] != 0){
-                grid[x - 2][y] = 0;
-                grid[x - 1][y] = 0;
-                recursion(x - 2, y, grid);
+            if(grid[x -4][y] != 0){
+                for(int i = y-1; i < y+2; i++){
+                    grid[x-2][i] =0;
+                }
+                recursion(x - 4, y, grid);
             }
             break;
         }
@@ -115,10 +124,10 @@ int main(){
         }
     }
 
-    int x = rows/2, y = cols/2;
+    int x = rows/3, y = cols/3;
     srand(time(NULL));
 
-    recursion(x,y,grid);
+    recursion(x-1,y-1,grid);
 
     return 0;
 

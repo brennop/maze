@@ -49,20 +49,22 @@ int main(){
 
     //struct Player player = create();
     struct Player player; // empty player for debugging
-    player.x = 15;
-    player.y = 15;
 
-    game(player);
+    game(player, 33);
 }
 
-int game(struct Player player){
+int game(struct Player player, int size){
     int **map, opt;
 
-    map = genMap(30);
+    map = genMap(size);
+    player.x = size/2;
+    player.y = size/2;
+
+    map[player.y][player.x] = -1;
 
     while(1 == 1){
 
-        render(player.x, player.y, map);
+        render(player.x, player.y, map, size, 5);
         
         switch (getch()){
             case -1: //EOF
@@ -71,22 +73,30 @@ int game(struct Player player){
 
             case 'A': // UP
                 if(map[player.y-1][player.x] == 0){
+                    map[player.y-1][player.x] = -1;
+                    map[player.y][player.x] = 0;
                     player.y--;
                 }
                 break;
 
             case 'B': // Down
                 if(map[player.y+1][player.x] == 0){
+                    map[player.y+1][player.x] = -1;
+                    map[player.y][player.x] = 0;
                     player.y++;
                 }
                 break;
             case 'C': // rigth
                 if(map[player.y][player.x+1] == 0){
+                    map[player.y][player.x+1] = -1;
+                    map[player.y][player.x] = 0;
                     player.x++;
                 }
                 break;
             case 'D': //left
                 if(map[player.y][player.x-1] == 0){
+                    map[player.y][player.x-1] = -1;
+                    map[player.y][player.x] = 0;
                     player.x--;
                 }
                 break;
@@ -177,31 +187,34 @@ struct Player create(){
     
 }
 
-void render(int x, int y, int ** map){
+void render(int x, int y, int ** map, int size, int fov){
     system(CLEAR);
 
     // 
-    for(int i = y-2; i < y+3; i++){
-        for(int j = x-2; j < x+3; j++){
-            if(i == y && j == x){
-                printf("@");
-            }else{
-            switch (map[i][j])
-                {
-                case 1:
-                    printf("#");
-                    break;
-                case -1:
-                    printf("@");
-                    break;
-                default:
-                    printf(" ");
-                    break;
-                }
+    for(int i = y-fov/2; i <= y+fov/2; i++){
+        for(int j = x-fov/2; j < x+fov/2; j++){
+            if(i >= 0 && i < size && j >= 0 && j < size){
+                switch (map[i][j])
+                    {
+                    case 1:
+                        printf("#");
+                        break;
+                    case -1:
+                        printf("@");
+                        break;
+                    default:
+                        printf(" ");
+                        break;
+                    }
+            }
+            else{
+                printf(" ");
             }
         }
         printf("\n");
+        
     }
+    printf("%d %d\n", x-2, y-2);
 }
 
 
@@ -225,14 +238,19 @@ int ** genMap(int size){
     }
 
     // começa com a célula do meio do labirinto
-    walk(size/2, size/2, grid, size);
+    walk(2, 2, grid, size);
 
     return grid;
 
 }
 
 void walk(int x, int y, int ** grid, int size){
-    grid[x][y] = 0; // Marca a célula atual como visitada
+    // Marca a região da célula atual como visitada
+    for(int i = y-1; i < y+2; i++){
+        for(int j = x-1; j < x+2; j++){
+            grid[j][i] = 0; 
+        }
+    }
     
     for(int i = 0; i < 4; i++){ // para cada direção ( não vai na direção que veio )
         int neighbours[4]; // Vetor de vizinhos possíveis
@@ -241,20 +259,20 @@ void walk(int x, int y, int ** grid, int size){
         // Testa em cada direção se é um vizinho possível
         // se for um candidato, guarda a posição "contígua" na matriz
 
-        if(y - 2 > 0 && grid[x][y - 2] != 0){ //up
-            neighbours[k] = x + size * (y - 2);
+        if(y - 4 > 0 && grid[x][y - 4] != 0){ //up
+            neighbours[k] = x + size * (y - 4);
             k++;
         }
-        if(x - 2 > 0 && grid[x - 2][y] != 0){ // left
-            neighbours[k] = x - 2 + size * y;
+        if(x - 4 > 0 && grid[x - 4][y] != 0){ // left
+            neighbours[k] = x - 4 + size * y;
             k++;
         }
-        if(y + 2 < size -1 && grid[x][y + 2] != 0){ // down
-            neighbours[k] = x + size * (y + 2);
+        if(y + 4 < size -1 && grid[x][y + 4] != 0){ // down
+            neighbours[k] = x + size * (y + 4);
             k++;
         }
-        if(x + 2 < size -1 && grid[x + 2][y] != 0){ // right
-            neighbours[k] = x + 2 + size * y;
+        if(x + 4 < size -1 && grid[x + 4][y] != 0){ // right
+            neighbours[k] = x + 4 + size * y;
             k++;
         }
 
@@ -266,7 +284,14 @@ void walk(int x, int y, int ** grid, int size){
             int next_x = neighbours[r] % size, next_y = neighbours[r] / size; 
 
             // remove a parede
-            grid[(next_x + x)/2][(y + next_y) / 2] = 0; 
+            //grid[(next_x + x)/2][(y + next_y) / 2] = 0; 
+
+            // remove as paredes
+            for(int i = -1; i < 2; i++){
+                for(int j = -1; j < 2; j++){
+                    grid[(next_x + x)/2 + j][(y + next_y)/2 + i] =0;
+                }
+            }
 
             // anda para a próxima célula
             walk(next_x, next_y, grid, size); 
