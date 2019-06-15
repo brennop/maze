@@ -38,7 +38,7 @@ void recursion(int x, int y, int grid[rows][cols]){
                 printf(".");
             }else{
             if(grid[i][j] == 1){
-                printf("#");
+                printf("=");
             }else{
                 printf(" ");
             }

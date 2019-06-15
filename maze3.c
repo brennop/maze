@@ -37,7 +37,7 @@ void recursion(int x, int y, int grid[rows][cols]){
             grid[j][i] = 0; // mark cells as visited
         }
     }
-    render(grid,x,y, 50);
+    render(grid,x,y, 250);
 
     for(int i = 0; i < 4; i++){
         int neighbours[4];

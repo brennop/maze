@@ -5,12 +5,30 @@
 #include <unistd.h>
 #include <assert.h>
 #include <time.h>
+#include <stdbool.h>
 
 #ifdef _WIN32
 #define CLEAR "cls"
 #else
 #define CLEAR "clear"
 #endif
+
+// terminal coloridinho
+#define RED "\x1B[31m"
+#define GRN "\x1B[32m"
+#define YEL "\x1B[33m"
+#define BLU "\x1B[34m"
+#define MAG "\x1B[35m"
+#define CYN "\x1B[36m"
+#define WHT "\x1B[37m"
+#define RST "\x1B[0m"
+
+// outros efeitos top
+#define BLD "\x1B[1m"
+#define ITL "\x1B[3m"
+#define UND "\x1B[4m"
+
+bool DEBUG = false;
 
 /*Função de captura de entrada do teclado */
 int getch() {
@@ -32,23 +50,40 @@ int getch() {
 }
 
 struct Player{
-    int race, aling, class, size, strength, constitution, dexterity, intelligence, x, y;
+    int race, aling, class, size, strength, constitution, hp, dexterity, intelligence, x, y;
 };
 
+struct Trap{
+    int x, y;
+};
+
+// Buffer de mensagens no estilo Rogue/Nethack
+char message[50];
 
 int input();
 int game();
 int ** genMap();
+void spawnTraps();
+void checkTraps(struct Player * player, int ** grid, bool isAuto);
 void enter();
+void move();
 void walk();
 void render();
 struct Player create();
 
-int main(){
+int main(int argc, char *argv[]){
     srand(time(NULL));
 
-    //struct Player player = create();
-    struct Player player; // empty player for debugging
+    if(argc >= 2){
+        if(strcmp(argv[1], "-d") == 0){
+            DEBUG = true;
+        }
+    }
+
+    struct Player player = create();
+    //struct Player player; // empty player for debugging
+    player.hp = 20;
+    player.constitution = 20;
 
     game(player, 33);
 }
@@ -57,6 +92,7 @@ int game(struct Player player, int size){
     int **map, opt;
 
     map = genMap(size);
+    spawnTraps(map, size);
     player.x = size/2;
     player.y = size/2;
 
@@ -64,7 +100,7 @@ int game(struct Player player, int size){
 
     while(1 == 1){
 
-        render(player.x, player.y, map, size, 5);
+        render(player, map, size, 2);
         
         switch (getch()){
             case -1: //EOF
@@ -72,43 +108,83 @@ int game(struct Player player, int size){
                 break;
 
             case 'A': // UP
-                if(map[player.y-1][player.x] == 0){
-                    map[player.y-1][player.x] = -1;
-                    map[player.y][player.x] = 0;
-                    player.y--;
-                }
+                move(&player, map, 0, -1);
                 break;
-
             case 'B': // Down
-                if(map[player.y+1][player.x] == 0){
-                    map[player.y+1][player.x] = -1;
-                    map[player.y][player.x] = 0;
-                    player.y++;
-                }
+                move(&player, map, 0, 1);
                 break;
             case 'C': // rigth
-                if(map[player.y][player.x+1] == 0){
-                    map[player.y][player.x+1] = -1;
-                    map[player.y][player.x] = 0;
-                    player.x++;
-                }
+                move(&player, map, 1, 0);
                 break;
             case 'D': //left
-                if(map[player.y][player.x-1] == 0){
-                    map[player.y][player.x-1] = -1;
-                    map[player.y][player.x] = 0;
-                    player.x--;
-                }
+                move(&player, map, -1, 0);
+                break;
+            case 'c':
+                strcpy(message, "ITL procurando armadilhas..." RST);
+                checkTraps(&player, map, false);
                 break;
             default:
+                // limpa o buffer a cada ação
+                strcpy(message, "\0");
                 break;
         }
+
     }
 }
 
 // Função para esperar um input qualquer do usuário
 void enter(){
     scanf("%*c%*[^\n]s"); 
+}
+
+
+void move(struct Player * player, int ** grid, int dir_x, int dir_y){
+    // verificação automatica de armadilhas
+    checkTraps(player, grid, true);
+
+    // Verifica se o movimento é válido
+    if(grid[player->y + dir_y][player->x + dir_x] != 1){
+
+        // Verifica se é armadilha:
+        if(grid[player->y + dir_y][player->x + dir_x] == -2 || grid[player->y + dir_y][player->x + dir_x] == 2 || grid[player->y + dir_y][player->x + dir_x] == 3){
+            // reduz a vida do player
+            player->hp -= 1;
+            strcpy(message, ITL "você pisou em uma armadilha" RST);
+            // armadilha é destruída após
+        }
+
+        grid[player->y + dir_y][player->x + dir_x] = -1;
+        grid[player->y][player->x] = 0;
+
+        player->x += dir_x;
+        player->y += dir_y;
+    }
+}
+
+
+// TODO: REFACTOR THIS!!
+void checkTraps(struct Player * player, int ** grid, bool isAuto){
+    
+    for(int i = player->y - 2; i <= player->y + 2; i++){
+        for(int j = player->x - 2; j <= player-> x +2; j++){
+            if(grid[i][j] == 2 || grid[i][j] == 3 - isAuto){
+                int r = rand() % 100;
+                int classModifier;
+
+                if(player->class == 3){
+                    classModifier = 12;
+                }else{
+                    classModifier = 20;
+                }
+
+                if( (player->dexterity + player->intelligence) * 100 / classModifier >= r){
+                    grid[i][j] = -2;
+                }else{
+                    grid[i][j] += isAuto;
+                }
+            }
+        }
+    }
 }
 
 // Função para pegar um input de opções
@@ -135,7 +211,7 @@ struct Player create(){
 
     printf("Profissão\n");
     if(p.aling == 3){
-        p.class = input("( 1 - Gurreiro | 2 - Mago )", 3);
+        p.class = input("( 1 - Gurreiro | 2 - Mago )", 2);
     }else{
         p.class = input("( 1 - Gurreiro | 2 - Mago | 3 - Ladino )", 3);
     }
@@ -180,6 +256,8 @@ struct Player create(){
         p.constitution -= 1;
     }
 
+    p.hp = p.constitution;
+
     p.x = 0;
     p.y = 0;
 
@@ -187,36 +265,89 @@ struct Player create(){
     
 }
 
-void render(int x, int y, int ** map, int size, int fov){
+void render(struct Player player, int ** map, int size, int fov){
     system(CLEAR);
-
+    printf("\n");
     // 
-    for(int i = y-fov/2; i <= y+fov/2; i++){
-        for(int j = x-fov/2; j < x+fov/2; j++){
+    for(int i = player.y - fov; i <= player.y + fov; i++){
+        printf("    ");
+        for(int j = player.x - fov; j <= player.x + fov; j++){
+            
             if(i >= 0 && i < size && j >= 0 && j < size){
                 switch (map[i][j])
                     {
                     case 1:
-                        printf("#");
+                        printf("= ");
                         break;
                     case -1:
-                        printf("@");
+                        printf(YEL "@ " RST);
+                        break;
+                    case -2:
+                        printf(RED "x " RST);
                         break;
                     default:
-                        printf(" ");
+                        printf(". ");
                         break;
                     }
             }
             else{
-                printf(" ");
+                printf("  ");
             }
         }
         printf("\n");
         
     }
-    printf("%d %d\n", x-2, y-2);
+    printf("\n");
+    printf("HP: %d/%d\n", player.hp, player.constitution);
+    printf("%s\n", message);
+
+    if(DEBUG){
+        for(int i = 0; i < size; i++){
+            for(int j = 0; j < size; j++){
+                switch (map[i][j])
+                    {
+                    case 1:
+                        printf("= ");
+                        break;
+                    case -1:
+                        printf(YEL "@ " RST);
+                        break;
+                    case -2:
+                        printf(RED "x " RST);
+                        break;
+                    case 2:
+                        printf(YEL "x " RST);
+                        break;
+                    case 3:
+                        printf(BLU "x " RST);
+                        break;
+                    default:
+                        printf(". ");
+                        break;
+                    }
+            }
+            printf("\n");
+        }
+        printf("%d %d\n", player.x, player.y);
+    }
+
+
 }
 
+void spawnTraps(int ** grid, int size){
+    int n = size/4; // Quantidade de traps
+    int x, y; // posição das traps
+
+    while(n > 0){
+        x = rand() % size;
+        y = rand() % size;
+
+        if(grid[y][x] == 0){
+            grid[y][x] = 2; // Coloca armadilha;
+            n--;
+        }
+    }
+}
 
 /* 
 
