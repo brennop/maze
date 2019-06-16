@@ -3,8 +3,8 @@
 #include <time.h>
 #include <unistd.h>
 
-#define rows 17
-#define cols 17
+#define rows 21
+#define cols 21
 
 void render(int grid[rows][cols], int t,int x, int y){
     system("clear");
@@ -82,14 +82,18 @@ int main(){
 
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){
-            grid[i][j] = 1;
+            if(i < 2 || i > rows-3 || j < 2 || j > rows-3){
+                grid[i][j] = 0;
+            }else{
+                grid[i][j] = 1;
+            }
         }
     }
 
     int x = rows/3, y = cols/3;
     srand(time(NULL));
 
-    recursion(2,2,grid);
+    recursion(4,4,grid);
 
     return 0;
 
