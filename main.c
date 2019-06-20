@@ -49,13 +49,17 @@ int getch() {
     return(c);
 }
 
-struct Player{
+typedef struct{
     int race, aling, class, size, strength, constitution, dexterity, intelligence, x, y;
     int hp, maxhp;
     int inventory[9], items;
     int stronger;
-};
+}Player;
 
+typedef struct{
+    int class;
+    int x, y;
+}Enemy;
 
 // Use it later, if has rendering/raytracing
 struct Trap{
@@ -65,20 +69,24 @@ struct Trap{
 char message[100]; // Buffer de mensagens no estilo Rogue/Nethack
 bool isPlaying = false; // Variável para indicar se o jogo está rodando ou pausado
 
-int input();
-int game();
-int ** genMap();
+int input(); // talvez vai morrer
+void enter(); // tbm
 
-void spawn();
-void checkTraps(struct Player * player, int ** grid, bool isAuto);
+int ** genMap(int size);
+void walk(int x, int y, int ** grid, int size);
 
-void enter();
-void move();
-void walk();
-void render();
-void inventory();
+int game(Player player, char i[7], int size);
 
-struct Player create();
+void spawn(int ** grid, int size, int n, int type);
+void checkTraps(Player * player, int ** grid, bool isAuto);
+
+void move(Player * player, int ** grid, int dir_x, int dir_y);
+
+void render(Player player, int ** map, int size, int fov, int ttl);
+void inventory(Player * player);
+
+Player create();
+Enemy spawnEnemy(int ** grid, int size, Player player);
 char * config();
 
 int main(int argc, char *argv[]){
@@ -90,17 +98,42 @@ int main(int argc, char *argv[]){
         }
     }
 
-    struct Player player = create();
+    Player player = create();
     char i[7] = {'A', 'B', 'C', 'D', 'c', 'i', '\0'};
-    //struct Player player; // empty player for debugging
+    //Player player; // empty player for debugging
     //player.hp = 20;
     //player.constitution = 20;
 
     game(player, i, 33);
 }
 
-struct Player create(){
-    struct Player p;
+
+// Função para esperar um input qualquer do usuário
+void enter(){
+    scanf("%*c%*[^\n]s"); 
+}
+
+// Função para pegar um input de opções
+int input(char txt[], int opts){
+    int chosen = 0;
+    while(chosen > opts || chosen <= 0){ // enquanto o escolha não estiver no intervalo válido
+        printf("%s ", txt);
+        scanf("%d", &chosen);
+        printf("\n");
+    }
+    return chosen;
+}
+
+int min(int a, int b){
+    return((a+b - abs(a-b))/2);
+}
+
+int max(int a, int b){
+    return((a+b + abs(a-b))/2);
+}
+
+Player create(){
+    Player p;
     int sum = 11;
 
     printf("Raça\n");
@@ -172,9 +205,13 @@ struct Player create(){
     
 }
 
-int game(struct Player player, char i[7], int size){
+int game(Player player, char i[7], int size){
     int **map;
     char opt;
+
+    int timeToNextEnemy = 10, entityCount = 0;
+    Enemy *enemies;
+    enemies = (Enemy*) malloc(10*sizeof(Enemy));
 
     map = genMap(size);
 
@@ -192,52 +229,47 @@ int game(struct Player player, char i[7], int size){
     // Começa o jogo
     isPlaying = true;
     while(1 == 1){
+        render(player, map, size, 2, timeToNextEnemy); // should I render after inputs??
 
-        if(isPlaying){
-            render(player, map, size, 2);
+        opt = getch();
 
-            opt = getch();
+        // Se o input for um comando válido
+        // necessário para passar o round corretamente
+        if(strchr(i, opt)){
+            // Passa o round...
 
-            // Se o input for um comando válido
-            // necessário para passar o round corretamente
-            if(strchr(i, opt)){
-                // Passa o round...
-
-                // limpa o buffer a cada ação
-                strcpy(message, "\0");
-                // reduz o efeito de potencialização a cada turno
-                if(player.stronger)
-                    player.stronger--;
-                // move os monstros
-
-                // Switch/Case evitado pelos valores não serem integrais/constantes
-                if(opt == i[0]){ // Up
-                    move(&player, map, 0, -1);
-                }else if(opt == i[1]){ // Down
-                    move(&player, map, 0, 1);
-                }else if(opt == i[2]){ // Rigth
-                    move(&player, map, 1, 0);
-                }else if(opt == i[3]){ // Left
-                    move(&player, map, -1, 0);
-                }else if(opt == i[4]){
-                    strcpy(message, ITL "procurando armadilhas..." RST);
-                    checkTraps(&player, map, false);
-                }else if(opt == i[5]){
-                    inventory(&player);
-                }
+            // limpa o buffer a cada ação
+            strcpy(message, "\0");
+            // reduz o efeito de potencialização a cada turno
+            if(player.stronger)
+                player.stronger--;
+            // Spawn dos monstros
+            if(!(--timeToNextEnemy) && entityCount < 10){
+                enemies[++entityCount] = spawnEnemy(map, size, player);
+                timeToNextEnemy = 60 + rand() % 20;
             }
+            // move os monstros
 
+            // Switch/Case evitado pelos valores não serem integrais/constantes
+            if(opt == i[0]){ // Up
+                move(&player, map, 0, -1);
+            }else if(opt == i[1]){ // Down
+                move(&player, map, 0, 1);
+            }else if(opt == i[2]){ // Rigth
+                move(&player, map, 1, 0);
+            }else if(opt == i[3]){ // Left
+                move(&player, map, -1, 0);
+            }else if(opt == i[4]){
+                strcpy(message, ITL "procurando armadilhas..." RST);
+                checkTraps(&player, map, false);
+            }else if(opt == i[5]){
+                inventory(&player);
+            }
         }
     }
 }
 
-// Função para esperar um input qualquer do usuário
-void enter(){
-    scanf("%*c%*[^\n]s"); 
-}
-
-
-void move(struct Player * player, int ** grid, int dir_x, int dir_y){
+void move(Player * player, int ** grid, int dir_x, int dir_y){
     // verificação automatica de armadilhas
     checkTraps(player, grid, true);
 
@@ -275,7 +307,7 @@ void move(struct Player * player, int ** grid, int dir_x, int dir_y){
 
 
 // Verifica se há traps na região (automaticamente ou não)
-void checkTraps(struct Player * player, int ** grid, bool isAuto){
+void checkTraps(Player * player, int ** grid, bool isAuto){
     
     for(int i = player->y - 2; i <= player->y + 2; i++){
         for(int j = player->x - 2; j <= player-> x +2; j++){
@@ -299,106 +331,8 @@ void checkTraps(struct Player * player, int ** grid, bool isAuto){
     }
 }
 
-// Função para pegar um input de opções
-int input(char txt[], int opts){
-    int chosen = 0;
-    while(chosen > opts || chosen <= 0){ // enquanto o escolha não estiver no intervalo válido
-        printf("%s ", txt);
-        scanf("%d", &chosen);
-        printf("\n");
-    }
-    return chosen;
-}
 
-
-
-
-void render(struct Player player, int ** map, int size, int fov){
-    system(CLEAR);
-    printf("\n");
-    // 
-    for(int i = player.y - fov; i <= player.y + fov; i++){
-        printf("    ");
-        for(int j = player.x - fov; j <= player.x + fov; j++){
-            
-            if(i >= 0 && i < size && j >= 0 && j < size){
-                switch (map[i][j])
-                    {
-                    case 1:
-                        printf(GRN "# " RST);
-                        break;
-                    case -1:
-                        printf(YEL "@ " RST);
-                        break;
-                    case -2:
-                        printf(RED "x " RST);
-                        break;
-                    case 4:
-                        printf(GRN "º " RST);
-                        break;
-                    case 5:
-                        printf(BLU "º " RST);
-                        break;
-                    default:
-                        printf(". ");
-                        break;
-                    }
-            }
-            else{
-                printf("  ");
-            }
-        }
-        printf("\n");
-        
-    }
-    printf("\n");
-
-    // HUD
-    printf("HP: %d/%d   ", player.hp, player.maxhp);
-    if(player.stronger){
-        printf("Pot: %d Rounds", player.stronger);
-    }
-    printf("\n");
-    printf("%s\n", message);
-
-    if(DEBUG){
-        for(int i = 0; i < size; i++){
-            for(int j = 0; j < size; j++){
-                switch (map[i][j])
-                    {
-                    case 1:
-                        printf("= ");
-                        break;
-                    case -1:
-                        printf(YEL "@ " RST);
-                        break;
-                    case -2:
-                        printf(RED "x " RST);
-                        break;
-                    case 2:
-                        printf(YEL "x " RST);
-                        break;
-                    case 3:
-                        printf(BLU "x " RST);
-                        break;
-                    case 4:
-                        printf(GRN "º " RST);
-                        break;
-                    case 5:
-                        printf(BLU "º " RST);
-                        break;
-                    default:
-                        printf(". ");
-                        break;
-                    }
-            }
-            printf("\n");
-        }
-        printf("%d %d\n", player.x, player.y);
-    }
-}
-
-void inventory(struct Player * player){
+void inventory(Player * player){
     bool exit = false; // TODO: change this name
     int opt;
 
@@ -456,7 +390,7 @@ void inventory(struct Player * player){
 void spawn(int ** grid, int size, int n, int type){
     int x, y; // posição das traps
 
-    while(n > 0){
+    while(n > 0){ // caso nao tenha lugar disponivel, entra em loop infinito
         x = rand() % size;
         y = rand() % size;
 
@@ -464,8 +398,123 @@ void spawn(int ** grid, int size, int n, int type){
             grid[y][x] = type; // Coloca armadilha;
             n--;
         }
+
+        
     }
 }
+
+Enemy spawnEnemy(int ** grid, int size, Player player){
+    int x, y;
+    Enemy enemy = {0, 0, 0};
+
+    while(enemy.class == 0){
+        x = max(player.x - 5, 0) + min(rand() % 10, size - player.x);
+        y = max(player.y - 5, 0) + min(rand() % 10, size - player.y);
+
+        if(grid[y][x] == 0){
+            grid[y][x] = -3;
+            enemy.class = 1 + rand() % 3;
+            enemy.x = x;
+            enemy.y = y;
+        }
+    }
+
+    return enemy;
+}
+
+
+void render(Player player, int ** map, int size, int fov, int ttl){ // delete ttl
+    system(CLEAR);
+    printf("\n");
+    // 
+    for(int i = player.y - fov; i <= player.y + fov; i++){
+        printf("    ");
+        for(int j = player.x - fov; j <= player.x + fov; j++){
+            
+            if(i >= 0 && i < size && j >= 0 && j < size){
+                switch (map[i][j])
+                    {
+                    case 0:
+                        printf(". ");
+                        break;
+                    case 1:
+                        printf(GRN "# " RST);
+                        break;
+                    case -1:
+                        printf(YEL "@ " RST);
+                        break;
+                    case -2:
+                        printf(RED "x " RST);
+                        break;
+                    case 4:
+                        printf(GRN "º " RST);
+                        break;
+                    case 5:
+                        printf(BLU "º " RST);
+                        break;
+                    default:
+                        printf("%d ",map[i][j]);
+                        break;
+                    }
+            }
+            else{
+                printf("  ");
+            }
+        }
+        printf("\n");
+        
+    }
+    printf("\n");
+
+    // HUD
+    printf("HP: %d/%d   ", player.hp, player.maxhp);
+    if(player.stronger){
+        printf("Pot: %d Rounds", player.stronger);
+    }
+    printf("    %d", ttl);
+    printf("\n");
+    printf("%s\n", message);
+
+    if(DEBUG){
+        for(int i = 0; i < size; i++){
+            for(int j = 0; j < size; j++){
+                switch (map[i][j])
+                    {
+                    case 1:
+                        printf("= ");
+                        break;
+                    case -1:
+                        printf(YEL "@ " RST);
+                        break;
+                    case -2:
+                        printf(RED "x " RST);
+                        break;
+                    case 2:
+                        printf(YEL "x " RST);
+                        break;
+                    case 3:
+                        printf(BLU "x " RST);
+                        break;
+                    case 4:
+                        printf(GRN "º " RST);
+                        break;
+                    case 5:
+                        printf(BLU "º " RST);
+                        break;
+                    case -3:
+                        printf("k ");
+                        break;
+                    default:
+                        printf(". ");
+                        break;
+                    }
+            }
+            printf("\n");
+        }
+        printf("%d %d\n", player.x, player.y);
+    }
+}
+
 
 /* 
 
