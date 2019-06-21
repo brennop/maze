@@ -59,6 +59,7 @@ typedef struct{
 typedef struct{
     int class;
     int x, y;
+    int state; // 0 - idle, 1 - walking, 2 - attaking
 }Enemy;
 
 // Use it later, if has rendering/raytracing
@@ -77,10 +78,11 @@ void walk(int x, int y, int ** grid, int size);
 
 int game(Player player, char i[7], int size);
 
-void spawn(int ** grid, int size, int n, int type);
+int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
 
 void move(Player * player, int ** grid, int dir_x, int dir_y);
+void enemyAction(Enemy * enemy, int ** grid, Player * player);
 
 void render(Player player, int ** map, int size, int fov, int ttl);
 void inventory(Player * player);
@@ -130,6 +132,10 @@ int min(int a, int b){
 
 int max(int a, int b){
     return((a+b + abs(a-b))/2);
+}
+
+int sign(int x){
+    return (x > 0) - (x < 0);
 }
 
 Player create(){
@@ -244,11 +250,22 @@ int game(Player player, char i[7], int size){
             if(player.stronger)
                 player.stronger--;
             // Spawn dos monstros
-            if(!(--timeToNextEnemy) && entityCount < 10){
-                enemies[++entityCount] = spawnEnemy(map, size, player);
-                timeToNextEnemy = 60 + rand() % 20;
+            if(!(--timeToNextEnemy) && entityCount < 9){
+                //enemies[entityCount++] = spawnEnemy(map, size, player);
+                int pos = spawn(map, size, 1, -3);
+                enemies[entityCount].class = 1 + rand() % 3;
+                enemies[entityCount].x = pos / size;
+                enemies[entityCount].y = pos % size;
+
+                entityCount++;
+
+                //timeToNextEnemy = 60 + rand() % 20;
+                timeToNextEnemy = 6;
             }
             // move os monstros
+            for(int e = 0; e < entityCount; e++){
+                enemyAction(&enemies[e], map, &player);
+            }
 
             // Switch/Case evitado pelos valores não serem integrais/constantes
             if(opt == i[0]){ // Up
@@ -387,7 +404,7 @@ void inventory(Player * player){
 }
 
 // Coloca n types em grid aleatóriamente
-void spawn(int ** grid, int size, int n, int type){
+int spawn(int ** grid, int size, int n, int type){
     int x, y; // posição das traps
 
     while(n > 0){ // caso nao tenha lugar disponivel, entra em loop infinito
@@ -395,21 +412,22 @@ void spawn(int ** grid, int size, int n, int type){
         y = rand() % size;
 
         if(grid[y][x] == 0){
-            grid[y][x] = type; // Coloca armadilha;
+            grid[y][x] = type; // Coloca type;
             n--;
         }
-
-        
     }
+
+    return y + x * size;
 }
 
+/*
 Enemy spawnEnemy(int ** grid, int size, Player player){
     int x, y;
     Enemy enemy = {0, 0, 0};
 
-    while(enemy.class == 0){
-        x = max(player.x - 5, 0) + min(rand() % 10, size - player.x);
-        y = max(player.y - 5, 0) + min(rand() % 10, size - player.y);
+    while(enemy.class == 0){ // think this through
+        x = rand() % size;
+        y = rand() % size;
 
         if(grid[y][x] == 0){
             grid[y][x] = -3;
@@ -420,6 +438,55 @@ Enemy spawnEnemy(int ** grid, int size, Player player){
     }
 
     return enemy;
+}*/
+
+int path(int ** grid, int x, int y, int end_x, int end_y){
+    int neighbours[4];
+    int k = 0;
+
+    for(int i = y-1; i < y+2; i+=2){
+        for(int j = x-1; j < x+2; j+=2){
+            if(i == end_y && j == end_x){
+                return i - end_y + j - end_x;
+            }else{
+                return path(grid, j, i, end_x, end_y);
+            }
+        }
+    }
+
+}
+
+void enemyAction(Enemy * enemy, int ** grid, Player * player){
+    int dist_x = abs(enemy->x - player->x);
+    int dist_y = abs(enemy->y - player->y);
+
+    // Verifica se o jogador está no raio
+    if(dist_x < 10 && dist_y < 10){
+        // Andar
+        if(dist_x > 1 || dist_y > 1){
+            if(rand() % 10 < 7){
+                // se move em apenas uma direção
+                /*
+                int dir_y = sign(player->y - enemy->y) * (dist_y > dist_x);
+                int dir_x = sign(player->x - enemy->x) * (dist_x > dist_y);
+
+                if(grid[enemy->y + dir_y][enemy->x + dir_x] == 0){
+                    grid[enemy->y + dir_y][enemy->x + dir_x] = -3;
+                    grid[enemy->y][enemy->x] = 0;
+                    enemy->y += dir_y;
+                    enemy->x += dir_x;
+
+                } */
+
+                // a*
+                
+
+
+            }else{
+                
+            }
+        }
+    }
 }
 
 
@@ -434,8 +501,8 @@ void render(Player player, int ** map, int size, int fov, int ttl){ // delete tt
             if(i >= 0 && i < size && j >= 0 && j < size){
                 switch (map[i][j])
                     {
-                    case 0:
-                        printf(". ");
+                    case -3:
+                        printf(MAG "k " RST);
                         break;
                     case 1:
                         printf(GRN "# " RST);
@@ -453,7 +520,7 @@ void render(Player player, int ** map, int size, int fov, int ttl){ // delete tt
                         printf(BLU "º " RST);
                         break;
                     default:
-                        printf("%d ",map[i][j]);
+                        printf(". ");
                         break;
                     }
             }
