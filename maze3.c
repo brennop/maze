@@ -10,15 +10,38 @@ void render(int grid[rows][cols], int t,int x, int y){
     system("clear");
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){
-            if(i == x && j == y){
+            if(grid[i][j] == 1){
+                printf("#");
+            }else if(grid[i][j] == 2){
+                printf(".");
+            }else if(grid[i][j] == 3){
                 printf("x");
-            }else{
-                if(grid[i][j] == 1){
-                    printf("#");
-                }else{
-                    printf(" ");
-                }
             }
+            else{
+                printf(" ");
+            }
+        }
+        printf("\n");
+    }   
+
+    struct timespec ts;
+    ts.tv_sec = t/1000;
+    ts.tv_nsec = (t%1000) * 1000000;
+    nanosleep(&ts, NULL);
+}
+
+void render2(int grid[rows][cols], int t, int x, int y){
+    system("clear");
+    for(int i = 0; i < rows; i++){
+        for(int j = 0; j < cols; j++){
+            if(x == j && y == i){
+                printf(". ");
+            }else{
+            if(grid[i][j] == __INT_MAX__){
+                printf("# ");
+            }else{
+                printf("%02d", grid[i][j]);
+            }}
         }
         printf("\n");
     }   
@@ -37,7 +60,6 @@ void recursion(int x, int y, int grid[rows][cols]){
             grid[j][i] = 0; // mark cells as visited
         }
     }
-    render(grid,x,y, 250);
 
     for(int i = 0; i < 4; i++){
         int neighbours[4];
@@ -76,9 +98,43 @@ void recursion(int x, int y, int grid[rows][cols]){
     }
 }
 
+void path(int x, int y, int distMap[rows][cols], int dis){
+    int queue[rows*cols];
+    queue[0] = x + cols*y;
+    int q = 1;
+    int * current = queue;
+    distMap[*current/rows][*current%cols] = 1;
+
+    while(q > current - queue){
+        x = * current/rows;
+        y = * current%cols;
+        dis = distMap[y][x] + 1;
+
+        if(distMap[y - 1][x] == 0){ //up
+            queue[q++] = x * rows + (y - 1);
+            distMap[y-1][x] = dis;
+        }
+        if(distMap[y][x - 1] == 0){ // left
+            queue[q++] = (x - 1) * rows + y;
+            distMap[y][x-1] = dis;
+        }
+        if(distMap[y + 1][x] == 0){ // down
+            queue[q++] = x * rows + (y + 1);
+            distMap[y+1][x] = dis;
+        }
+        if(distMap[y][x + 1] == 0){ // right
+            queue[q++] = (x + 1) * rows + y;
+            distMap[y][x+1] = dis;
+        }
+
+        current++;
+    }
+}
+
 
 int main(){
     int grid[rows][cols];
+    int dist[rows][cols];
 
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){
@@ -93,7 +149,24 @@ int main(){
     int x = rows/3, y = cols/3;
     srand(time(NULL));
 
+    
+
     recursion(4,4,grid);
+
+    for(int i = 0; i < rows; i++){
+        for(int j = 0; j < cols; j++){
+            if(grid[i][j] == 1){
+                dist[i][j] = __INT_MAX__;
+            }else{
+                dist[i][j] = 0;
+            }
+        }
+    }
+    
+    path(4,4, dist,1);
+    //render2(dist,10, 4,4);
+
+    
 
     return 0;
 

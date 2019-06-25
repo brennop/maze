@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <time.h>
 #include <stdbool.h>
+#include <limits.h>
 
 #ifdef _WIN32
 #define CLEAR "cls"
@@ -82,7 +83,8 @@ int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
 
 void move(Player * player, int ** grid, int dir_x, int dir_y);
-void enemyAction(Enemy * enemy, int ** grid, Player * player);
+void updateDist(Player player, int ** grid, int ** distMap, int size);
+void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, int size);
 
 void render(Player player, int ** map, int size, int fov, int ttl);
 void inventory(Player * player);
@@ -232,8 +234,14 @@ int game(Player player, char i[7], int size){
 
     map[player.y][player.x] = -1;
 
+    // cria o mapa de distâncias
+    int **distMap;
+    distMap = (int**) malloc(size*sizeof(int*));
+    for(int i = 0; i < size; i++){
+        distMap[i] = (int*) malloc(size*sizeof(int));
+    }
+
     // Começa o jogo
-    isPlaying = true;
     while(1 == 1){
         render(player, map, size, 2, timeToNextEnemy); // should I render after inputs??
 
@@ -262,9 +270,11 @@ int game(Player player, char i[7], int size){
                 //timeToNextEnemy = 60 + rand() % 20;
                 timeToNextEnemy = 6;
             }
+            // Atualiza as distâncias
+            updateDist(player, map, distMap, size);
             // move os monstros
             for(int e = 0; e < entityCount; e++){
-                enemyAction(&enemies[e], map, &player);
+                enemyAction(&player, &enemies[e], map, distMap, size);
             }
 
             // Switch/Case evitado pelos valores não serem integrais/constantes
@@ -440,23 +450,60 @@ Enemy spawnEnemy(int ** grid, int size, Player player){
     return enemy;
 }*/
 
-int path(int ** grid, int x, int y, int end_x, int end_y){
-    int neighbours[4];
-    int k = 0;
-
-    for(int i = y-1; i < y+2; i+=2){
-        for(int j = x-1; j < x+2; j+=2){
-            if(i == end_y && j == end_x){
-                return i - end_y + j - end_x;
+void updateDist(Player player, int ** grid, int ** distMap, int size){
+    // Copia o mapa para o mapa de distância
+    for(int i = 0; i < size; i++){
+        for(int j = 0; j < size; j++){
+            if(grid[i][j] == 0){
+                distMap[i][j] = 0;
             }else{
-                return path(grid, j, i, end_x, end_y);
+                distMap[i][j] = INT_MAX; // paredes e objetos tem distância máxima
             }
         }
     }
 
+    int x = player.x, y = player.y, dist;
+
+    int queue[size*size]; 
+    // define a fila como zeros
+    for(int i; i < size*size; i++){
+        queue[i] = 0;
+    }
+    queue[0] = x + size * y; // TODO: inverter isso depois...
+    int q = 1; // indice da fila
+    int * current = queue; // célula atual
+    distMap[y][x] = 0;
+
+    // enquanto a fila não está vazia
+    while (q > current - queue){ // TODO: definir melhor condição...
+        x = * current / size;
+        y = * current % size;
+        dist = distMap[y][x] + 1; // aumenta a distância
+
+        // verifica os vizinhos e muda sua distância
+        if(distMap[y - 1][x] == 0){ //up
+            queue[q++] = x * size + (y - 1);
+            distMap[y-1][x] = dist;
+        }
+        if(distMap[y][x - 1] == 0){ // left
+            queue[q++] = (x - 1) * size + y;
+            distMap[y][x-1] = dist;
+        }
+        if(distMap[y + 1][x] == 0){ // down
+            queue[q++] = x * size + (y + 1);
+            distMap[y+1][x] = dist;
+        }
+        if(distMap[y][x + 1] == 0){ // right
+            queue[q++] = (x + 1) * size + y;
+            distMap[y][x+1] = dist;
+        }
+
+        current++; // vai para o próximo da fila
+    }
 }
 
-void enemyAction(Enemy * enemy, int ** grid, Player * player){
+
+void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, int size){
     int dist_x = abs(enemy->x - player->x);
     int dist_y = abs(enemy->y - player->y);
 
@@ -465,21 +512,32 @@ void enemyAction(Enemy * enemy, int ** grid, Player * player){
         // Andar
         if(dist_x > 1 || dist_y > 1){
             if(rand() % 10 < 7){
-                // se move em apenas uma direção
-                /*
-                int dir_y = sign(player->y - enemy->y) * (dist_y > dist_x);
-                int dir_x = sign(player->x - enemy->x) * (dist_x > dist_y);
+                int shortest = enemy->x*size + enemy->y;
+
+                // verifica o quadrado com menor distância
+                if(distMap[enemy->y - 1][enemy->x] < distMap[shortest%size][shortest/size]){ //up
+                    shortest = enemy->y - 1 + enemy->x * size;
+                }
+                if(distMap[enemy->y][enemy->x - 1] < distMap[shortest%size][shortest/size]){ // left
+                    shortest = enemy->y + (enemy->x -1)* size;
+                }
+                if(distMap[enemy->y + 1][enemy->x] < distMap[shortest%size][shortest/size]){ 
+                    shortest = enemy->y + 1 + enemy->x * size;
+                }
+                if(distMap[enemy->y][enemy->x + 1] < distMap[shortest%size][shortest/size]){ // left
+                    shortest = enemy->y + (enemy->x +1)* size;
+                }
+
+                int dir_y = enemy->y - shortest%size;
+                int dir_x = enemy->x - shortest/size;
 
                 if(grid[enemy->y + dir_y][enemy->x + dir_x] == 0){
                     grid[enemy->y + dir_y][enemy->x + dir_x] = -3;
                     grid[enemy->y][enemy->x] = 0;
                     enemy->y += dir_y;
                     enemy->x += dir_x;
-
-                } */
-
-                // a*
-                
+                }
+            
 
 
             }else{
