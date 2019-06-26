@@ -29,7 +29,14 @@
 #define ITL "\x1B[3m"
 #define UND "\x1B[4m"
 
+#define POTION1 4
+#define POTION2 5
+#define TRAP1 -2
+#define TRAP2 2
+#define TRAP3 3
+
 bool DEBUG = false;
+bool DIST = false;
 
 /*Função de captura de entrada do teclado */
 int getch() {
@@ -54,13 +61,16 @@ typedef struct{
     int race, aling, class, size, strength, constitution, dexterity, intelligence, x, y;
     int hp, maxhp;
     int inventory[9], items;
-    int stronger;
+    int stronger, attr;
 }Player;
 
 typedef struct{
-    int class;
+    int atk;
+    int intel;
+    int dex;
+    int hp;
     int x, y;
-    int state; // 0 - idle, 1 - walking, 2 - attaking
+    int frozen;
 }Enemy;
 
 // Use it later, if has rendering/raytracing
@@ -83,10 +93,12 @@ int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
 
 void move(Player * player, int ** grid, int dir_x, int dir_y);
+int attack(Player player, Enemy * enemies, int nenemies);
+
 void updateDist(Player player, int ** grid, int ** distMap, int size);
 void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, int size);
 
-void render(Player player, int ** map, int size, int fov, int ttl);
+void render(Player player, int ** map, int size, int fov, int ttl, int ** distMap);
 void inventory(Player * player);
 
 Player create();
@@ -99,11 +111,14 @@ int main(int argc, char *argv[]){
     if(argc >= 2){
         if(strcmp(argv[1], "-d") == 0){
             DEBUG = true;
+        }else if(strcmp(argv[1], "-a") == 0){
+            //DEBUG = true;
+            DIST = true;
         }
     }
 
     Player player = create();
-    char i[7] = {'A', 'B', 'C', 'D', 'c', 'i', '\0'};
+    char i[8] = {'A', 'B', 'C', 'D', 'c', 'i', 'e','\0'};
     //Player player; // empty player for debugging
     //player.hp = 20;
     //player.constitution = 20;
@@ -208,6 +223,7 @@ Player create(){
     }
     p.items = 0;
     p.stronger = 0;
+    p.attr = (p.class == 1) * p.strength + (p.class == 2) * p.intelligence + (p.class == 3) * p.dexterity;
 
     return p;
     
@@ -218,8 +234,9 @@ int game(Player player, char i[7], int size){
     char opt;
 
     int timeToNextEnemy = 10, entityCount = 0;
-    Enemy *enemies;
-    enemies = (Enemy*) malloc(10*sizeof(Enemy));
+    //Enemy *enemies;
+    //enemies = (Enemy*) malloc(10*sizeof(Enemy));
+    Enemy enemies[10];
 
     map = genMap(size);
 
@@ -243,12 +260,11 @@ int game(Player player, char i[7], int size){
 
     // Começa o jogo
     while(1 == 1){
-        render(player, map, size, 2, timeToNextEnemy); // should I render after inputs??
+        render(player, map, size, 2, timeToNextEnemy, distMap); // should I render after inputs??
 
         opt = getch();
 
-        // Se o input for um comando válido
-        // necessário para passar o round corretamente
+        // Passa o round toda vez que um input válido é recebido
         if(strchr(i, opt)){
             // Passa o round...
 
@@ -257,24 +273,49 @@ int game(Player player, char i[7], int size){
             // reduz o efeito de potencialização a cada turno
             if(player.stronger)
                 player.stronger--;
+
             // Spawn dos monstros
             if(!(--timeToNextEnemy) && entityCount < 9){
-                //enemies[entityCount++] = spawnEnemy(map, size, player);
+
+                // TODO criar um construtor de inimigos
+                int points = 8;
+                enemies[entityCount].atk = rand() % 5;
+                points -= enemies[entityCount].atk;
+                enemies[entityCount].dex = rand() % min(points,5);
+                points -= enemies[entityCount].dex;
+                enemies[entityCount].intel = rand() % min(points,5);
+                
                 int pos = spawn(map, size, 1, -3);
-                enemies[entityCount].class = 1 + rand() % 3;
                 enemies[entityCount].x = pos / size;
                 enemies[entityCount].y = pos % size;
 
+                enemies[entityCount].hp = rand() % 10;
+                enemies[entityCount].frozen = 0;
+
                 entityCount++;
 
-                //timeToNextEnemy = 60 + rand() % 20;
-                timeToNextEnemy = 6;
+                timeToNextEnemy = 10 + rand() % 20;
             }
+
             // Atualiza as distâncias
             updateDist(player, map, distMap, size);
-            // move os monstros
-            for(int e = 0; e < entityCount; e++){
-                enemyAction(&player, &enemies[e], map, distMap, size);
+
+            // atualiza os monstros
+            for(int e = entityCount-1; e >= 0; e--){
+                if(enemies[e].hp <= 0){
+                    // remove o inimigo do jogo
+                    map[enemies[e].y][enemies[e].x] = 0; // verificar se não deleta o player kkk
+                    Enemy buffer = enemies[entityCount-1];
+                    enemies[entityCount-1] = enemies[e];
+                    enemies[e] = buffer;
+                    entityCount--;
+                }else{
+                    if(!enemies[e].frozen){
+                        enemyAction(&player, &enemies[e], map, distMap, size);
+                    }else{
+                        enemies[e].frozen = false; // TODO: int ou bool?
+                    }
+                }
             }
 
             // Switch/Case evitado pelos valores não serem integrais/constantes
@@ -291,6 +332,8 @@ int game(Player player, char i[7], int size){
                 checkTraps(&player, map, false);
             }else if(opt == i[5]){
                 inventory(&player);
+            }else if(opt == i[6]){
+                attack(player, enemies, entityCount);
             }
         }
     }
@@ -329,6 +372,33 @@ void move(Player * player, int ** grid, int dir_x, int dir_y){
 
         player->x += dir_x;
         player->y += dir_y;
+    }
+}
+
+int attack(Player player, Enemy * enemies, int nenemies){
+    // distância de ataque
+    // 3 para magos
+    // 1 para o resto
+    int dist = (player.class % 2) * 2 + 1; 
+    for(int e = 0; e < nenemies; e++){
+        // se há um inimigo 'in range'
+        if(abs(player.x - enemies[e].x) <= dist && abs(player.y - enemies[e].y) <= dist){
+            if(rand() % 100 < (player.attr + 1 - enemies[e].dex)*20){
+                int hit = player.attr + 1 - enemies[e].intel;
+                if(player.class == 1){
+                    hit += player.strength;
+                }else if(player.class == 2){
+                    if(rand() % 2 == 1){
+                        enemies[e].frozen = true;
+                    }
+                }
+
+                int temp = enemies[e].hp;
+                enemies[e].hp -= hit;
+                sprintf(message, "acertou o monstro com %d hitpoints", temp - enemies[e].hp);
+                
+            }
+        }
     }
 }
 
@@ -430,34 +500,14 @@ int spawn(int ** grid, int size, int n, int type){
     return y + x * size;
 }
 
-/*
-Enemy spawnEnemy(int ** grid, int size, Player player){
-    int x, y;
-    Enemy enemy = {0, 0, 0};
-
-    while(enemy.class == 0){ // think this through
-        x = rand() % size;
-        y = rand() % size;
-
-        if(grid[y][x] == 0){
-            grid[y][x] = -3;
-            enemy.class = 1 + rand() % 3;
-            enemy.x = x;
-            enemy.y = y;
-        }
-    }
-
-    return enemy;
-}*/
-
 void updateDist(Player player, int ** grid, int ** distMap, int size){
     // Copia o mapa para o mapa de distância
     for(int i = 0; i < size; i++){
         for(int j = 0; j < size; j++){
-            if(grid[i][j] == 0){
-                distMap[i][j] = 0;
-            }else{
+            if(grid[i][j] == 1 || grid[i][j] == POTION1 || grid[i][j] == POTION2){
                 distMap[i][j] = INT_MAX; // paredes e objetos tem distância máxima
+            }else{
+                distMap[i][j] = 0;
             }
         }
     }
@@ -465,20 +515,18 @@ void updateDist(Player player, int ** grid, int ** distMap, int size){
     int x = player.x, y = player.y, dist;
 
     int queue[size*size]; 
-    // define a fila como zeros
-    for(int i; i < size*size; i++){
-        queue[i] = 0;
-    }
-    queue[0] = x + size * y; // TODO: inverter isso depois...
+    queue[0] = x* size + y; // adiciona a posição do jogador como primeiro na fila
     int q = 1; // indice da fila
     int * current = queue; // célula atual
     distMap[y][x] = 0;
 
     // enquanto a fila não está vazia
-    while (q > current - queue){ // TODO: definir melhor condição...
+    while (q > current - queue){
         x = * current / size;
         y = * current % size;
         dist = distMap[y][x] + 1; // aumenta a distância
+
+        // TODO: REFACTOR THIS!!!
 
         // verifica os vizinhos e muda sua distância
         if(distMap[y - 1][x] == 0){ //up
@@ -513,23 +561,32 @@ void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, in
         if(dist_x > 1 || dist_y > 1){
             if(rand() % 10 < 7){
                 int shortest = enemy->x*size + enemy->y;
+                int dir_y = 0, dir_x = 0;
+
+                // TODO: REFACTOR THIS!!!
 
                 // verifica o quadrado com menor distância
                 if(distMap[enemy->y - 1][enemy->x] < distMap[shortest%size][shortest/size]){ //up
                     shortest = enemy->y - 1 + enemy->x * size;
+                    dir_y = -1;
+                    dir_x = 0;
                 }
                 if(distMap[enemy->y][enemy->x - 1] < distMap[shortest%size][shortest/size]){ // left
                     shortest = enemy->y + (enemy->x -1)* size;
+                    dir_y = 0;
+                    dir_x = -1;
                 }
                 if(distMap[enemy->y + 1][enemy->x] < distMap[shortest%size][shortest/size]){ 
                     shortest = enemy->y + 1 + enemy->x * size;
+                    dir_y = 1;
+                    dir_x = 0;
                 }
                 if(distMap[enemy->y][enemy->x + 1] < distMap[shortest%size][shortest/size]){ // left
                     shortest = enemy->y + (enemy->x +1)* size;
+                    dir_y = 0;
+                    dir_x = 1;
                 }
 
-                int dir_y = enemy->y - shortest%size;
-                int dir_x = enemy->x - shortest/size;
 
                 if(grid[enemy->y + dir_y][enemy->x + dir_x] == 0){
                     grid[enemy->y + dir_y][enemy->x + dir_x] = -3;
@@ -537,18 +594,23 @@ void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, in
                     enemy->y += dir_y;
                     enemy->x += dir_x;
                 }
-            
 
-
+                updateDist(*player, grid, distMap, size);
             }else{
                 
+            }
+        }else{ // atacar
+            if(rand() % 100 < (enemy->atk + 1 - player->dexterity)*20){
+                int hit = enemy->atk + 1 - player->intelligence;
+                sprintf(message, "monstro atacou com %d hitpoints", hit);
+                player->hp -= hit;
             }
         }
     }
 }
 
 
-void render(Player player, int ** map, int size, int fov, int ttl){ // delete ttl
+void render(Player player, int ** map, int size, int fov, int ttl, int **  dist){ // delete ttl
     system(CLEAR);
     printf("\n");
     // 
@@ -578,7 +640,7 @@ void render(Player player, int ** map, int size, int fov, int ttl){ // delete tt
                         printf(BLU "º " RST);
                         break;
                     default:
-                        printf(". ");
+                        printf("..");
                         break;
                     }
             }
@@ -627,7 +689,7 @@ void render(Player player, int ** map, int size, int fov, int ttl){ // delete tt
                         printf(BLU "º " RST);
                         break;
                     case -3:
-                        printf("k ");
+                        printf(MAG "k " RST);
                         break;
                     default:
                         printf(". ");
@@ -637,6 +699,42 @@ void render(Player player, int ** map, int size, int fov, int ttl){ // delete tt
             printf("\n");
         }
         printf("%d %d\n", player.x, player.y);
+    }else if(DIST){
+        for(int i = 0; i < size; i++){
+            for(int j = 0; j < size; j++){
+                switch (map[i][j])
+                    {
+                    case 1:
+                        printf(" = ");
+                        break;
+                    case -1:
+                        printf(YEL " @ " RST);
+                        break;
+                    case -2:
+                        printf(RED " x " RST);
+                        break;
+                    case 2:
+                        printf(YEL " x " RST);
+                        break;
+                    case 3:
+                        printf(BLU " x " RST);
+                        break;
+                    case 4:
+                        printf(GRN " º " RST);
+                        break;
+                    case 5:
+                        printf(BLU " º " RST);
+                        break;
+                    case -3:
+                        printf(MAG " k " RST);
+                        break;
+                    default:
+                        printf(" %02d", dist[i][j]);
+                        break;
+                    }
+            }
+            printf("\n");
+        }
     }
 }
 

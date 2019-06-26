@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <time.h>
 #include <unistd.h>
+#include <limits.h>
 
-#define rows 21
-#define cols 21
+#define rows 33
+#define cols 33
 
 void render(int grid[rows][cols], int t,int x, int y){
     system("clear");
@@ -35,12 +36,14 @@ void render2(int grid[rows][cols], int t, int x, int y){
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){
             if(x == j && y == i){
-                printf(". ");
+                printf(" . ");
             }else{
             if(grid[i][j] == __INT_MAX__){
-                printf("# ");
+                printf(" # ");
+            }else if(grid[i][j] == 0){
+                printf("   ");
             }else{
-                printf("%02d", grid[i][j]);
+                printf(" %02d", grid[i][j]);
             }}
         }
         printf("\n");
@@ -110,7 +113,9 @@ void path(int x, int y, int distMap[rows][cols], int dis){
         y = * current%cols;
         dis = distMap[y][x] + 1;
 
-        if(distMap[y - 1][x] == 0){ //up
+        render2(distMap,20,x,y);
+
+        if(distMap[y - 1][x] != INT_MAX){ //up
             queue[q++] = x * rows + (y - 1);
             distMap[y-1][x] = dis;
         }
@@ -163,7 +168,7 @@ int main(){
         }
     }
     
-    path(4,4, dist,1);
+    path(rows/2,cols/2, dist,1);
     //render2(dist,10, 4,4);
 
     
