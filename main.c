@@ -108,39 +108,39 @@ char * config();
 int main(int argc, char *argv[]){
     srand(time(NULL));
 
-    if(argc >= 2){
-        if(strcmp(argv[1], "-d") == 0){
-            DEBUG = true;
-        }else if(strcmp(argv[1], "-a") == 0){
-            //DEBUG = true;
-            DIST = true;
-        }
-    }
-
-    Player player = create();
+    // default input vector
     char i[8] = {'A', 'B', 'C', 'D', 'c', 'i', 'e','\0'};
-    //Player player; // empty player for debugging
-    //player.hp = 20;
-    //player.constitution = 20;
+    Player player;
 
-    game(player, i, 33);
-}
+    int opt = 0;
+    while (opt != 52){ // 52 ~> 4 in ascii
+        system(CLEAR);
+        printf("\n");
+        printf("    [ 1 ] Continuar\n    [ 2 ] Novo Jogo\n    [ 3 ] Opções\n    [ 4 ] Sair");
 
-
-// Função para esperar um input qualquer do usuário
-void enter(){
-    scanf("%*c%*[^\n]s"); 
+        opt = getch();
+        switch (opt - 48){
+            case 2:
+                player = create();
+                game(player, i, 33);
+                break;
+            case 3:
+                //config();
+                break;
+        }
+    }    
 }
 
 // Função para pegar um input de opções
-int input(char txt[], int opts){
+int input(char * txt, int opts){
     int chosen = 0;
-    while(chosen > opts || chosen <= 0){ // enquanto o escolha não estiver no intervalo válido
+    // enquanto a escolha não estiver no intervalo válido
+    while(chosen > opts + 48 || chosen <= 48){ 
+        system(CLEAR);
         printf("%s ", txt);
-        scanf("%d", &chosen);
-        printf("\n");
+        chosen = getch();
     }
-    return chosen;
+    return chosen - 48;
 }
 
 int min(int a, int b){
@@ -157,51 +157,105 @@ int sign(int x){
 
 Player create(){
     Player p;
-    int sum = 11;
+    int sum = 0;
 
-    printf("Raça\n");
-    p.race = input("( 1 - Humano | 2 - Anão | 3 - Elfo )", 3);
-
-    printf("Alinhamento\n");
-    p.aling = input("( 1 - Mal | 2 - Neutro | 3 - Bom )", 3);
-
-    printf("Profissão\n");
+    p.race = input("    " RED "Raça" RST "\n    [ 1 ] Humano\n    [ 2 ] Anão\n    [ 3 ] Elfo", 3);
+    p.aling = input("    Alinhamento\n    [ 1 ] Mal\n    [ 2 ] Neutro\n    [ 3 ] Bom", 3);
     if(p.aling == 3){
-        p.class = input("( 1 - Gurreiro | 2 - Mago )", 2);
+        p.class = input("    Profissão\n    [ 1 ] Gurreiro\n    [ 2 ] Mago", 2);
     }else{
-        p.class = input("( 1 - Gurreiro | 2 - Mago | 3 - Ladino )", 3);
+        p.class = input("    Profissão\n    [ 1 ] Gurreiro\n    [ 2 ] Mago\n    [ 3 ] Ladino", 3);
     }
 
-    printf("História Prévia\n");
-    enter();
+    /* system(CLEAR);
+    printf("    História Prévia\n");
+    scanf("%*c%*[^\n]s"); */
 
-    printf("\nPorte\n");
     if(p.race == 2){
-        p.size = input("( 1 - Médio | 2 - Pequeno )", 2) + 1;
+        p.size = input("    Porte\n    [ 1 ] Médio\n    [ 2 ] Pequeno", 2) + 1;
     }else{
-        p.size = input("( 1 - Grande | 2 - Médio | 3 - Pequeno )", 3);
+        p.size = input("    Porte\n    [ 1 ] Grande\n    [ 2 ] Médio\n    [ 3 ] Pequeno", 3);
     }
 
-    while (sum > 10){
-        sum = 0;
+    p.strength = 0;
+    p.constitution = 0;
+    p.dexterity = 0;
+    p.intelligence = 0;
 
-        printf("Força ");
-        p.strength = input("( 1 - 5 )", 5);
-        sum += p.strength;
+    int * current = &p.strength;
+    bool ready = false;
+    char opt;
+    while (!ready){
+        system(CLEAR);
 
-        printf("Constituição ");
-        p.constitution = input("( 1 - 5 )", 5);
-        sum += p.constitution;
+        printf("       "UND "F" RST "orça [ - ] ");
+        for(int i = 0; i < 5; i++){
+            if(p.strength > i){
+                printf(".");
+            }else{
+                printf(" ");
+            }
+        }
 
-        printf("Destreza ");
-        p.dexterity = input("( 1 - 5 )", 5);
-        sum += p.dexterity;
+        printf(" [ + ]\n" UND "C" RST "onstituição [ - ] ");
+        for(int i = 0; i < 5; i++){
+            if(p.constitution > i){
+                printf(".");
+            }else{
+                printf(" ");
+            }
+        }
 
-        printf("Inteligência ");
-        p.intelligence = input("( 1 - 5 )", 5);
-        sum += p.intelligence;
+        printf(" [ + ]\n    " UND "D" RST "estreza [ - ] ");
+        for(int i = 0; i < 5; i++){
+            if(p.dexterity > i){
+                printf(".");
+            }else{
+                printf(" ");
+            }
+        }
 
-        // TODO: Facilitar distribuição dos pontos
+        printf(" [ + ]\n" UND "I" RST "nteligência [ - ] ");
+        for(int i = 0; i < 5; i++){
+            if(p.intelligence > i){
+                printf(".");
+            }else{
+                printf(" ");
+            }
+        }
+
+        printf(" [ + ]\n\nPontos restantes: %2d", 10 - sum);
+        printf("\n[ x ] Continuar");
+
+        switch (opt = getch()){
+            case 'x':
+                ready = true;
+                break;
+            case 'f': // seta para cima
+                current = &p.strength;
+                break;
+            case 'c':
+                current = &p.constitution;
+                break;
+            case 'd':
+                current = &p.dexterity;
+                break;
+            case 'i':
+                current = &p.intelligence;
+                break;
+            case '-':
+                if(*current!=0){
+                    * current -= 1;
+                    sum--;
+                }
+                break;
+            case '+':
+                if(*current!=5 && sum < 10){
+                    * current += 1;
+                    sum++;
+                }
+                break;
+        }
     }
 
     if(p.race == 2){
@@ -209,12 +263,12 @@ Player create(){
         p.dexterity -= 1;
     }else if(p.race == 3){
         p.dexterity += 1;
-        p.constitution -= 1;
+        p.constitution -= 1 * (p.constitution > 0);
     }
 
-    // HP é 3 * Constituição
+    // HP é 7 * Constituição
     // Se constiuição for zero, HP = 1
-    p.hp = p.constitution * 3 + !p.constitution;
+    p.hp = p.constitution * 7 + !p.constitution;
     p.maxhp = p.hp;
 
     // Deixa o inventário vazio
@@ -450,7 +504,6 @@ void inventory(Player * player){
         printf("    ( i) voltar ao jogo");
 
         opt = getch();
-        printf("%d\n", opt);
 
         if(opt > 48 && opt <= player->items + 48){
             // Se for poção de regeneração
