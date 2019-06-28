@@ -82,34 +82,35 @@ char message[100]; // Buffer de mensagens no estilo Rogue/Nethack
 bool isPlaying = false; // Variável para indicar se o jogo está rodando ou pausado
 
 int input(); // talvez vai morrer
-void enter(); // tbm
 
 int ** genMap(int size);
 void walk(int x, int y, int ** grid, int size);
 
-int game(Player player, char i[7], int size);
+int game(Player player, char controls[8], int size);
 
 int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
 
 void move(Player * player, int ** grid, int dir_x, int dir_y);
-int attack(Player player, Enemy * enemies, int nenemies);
+int attack(Player player, Enemy * enemies, int nenemies, int ** grid);
 
 void updateDist(Player player, int ** grid, int ** distMap, int size);
 void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, int size);
 
 void render(Player player, int ** map, int size, int fov, int ttl, int ** distMap);
-void inventory(Player * player);
+void inventory(Player * player, char key);
+
+void bossFight(Player player);
 
 Player create();
 Enemy spawnEnemy(int ** grid, int size, Player player);
-char * config();
+void config(char * controls);
 
 int main(int argc, char *argv[]){
     srand(time(NULL));
 
     // default input vector
-    char i[8] = {'A', 'B', 'C', 'D', 'c', 'i', 'e','\0'};
+    char controls[8] = {'A', 'B', 'C', 'D', 'c', 'i', 'e','\0'};
     Player player;
 
     int opt = 0;
@@ -119,13 +120,16 @@ int main(int argc, char *argv[]){
         printf("    [ 1 ] Continuar\n    [ 2 ] Novo Jogo\n    [ 3 ] Opções\n    [ 4 ] Sair");
 
         opt = getch();
-        switch (opt - 48){
-            case 2:
+        switch (opt){
+            case '2':
                 player = create();
-                game(player, i, 33);
+                game(player, controls, 33);
                 break;
-            case 3:
-                //config();
+            case '3':
+                config(controls);
+                break;
+            case 'd':
+                DEBUG = true;
                 break;
         }
     }    
@@ -153,6 +157,38 @@ int max(int a, int b){
 
 int sign(int x){
     return (x > 0) - (x < 0);
+}
+
+void config(char * controls){
+    char opt = 0, key = 0;
+    
+    while (opt != 'x'){
+        system(CLEAR);
+
+        printf("    Controles\n");
+        printf("    [ 1 ] Andar para cima - [ %c ]\n", controls[0]);
+        printf("    [ 2 ] Andar para baixo - [ %c ]\n", controls[1]);
+        printf("    [ 3 ] Andar para direita - [ %c ]\n", controls[2]);
+        printf("    [ 4 ] Andar para esquerda - [ %c ]\n", controls[3]);
+        printf("    [ 5 ] Verificar armadilhas - [ %c ]\n", controls[4]);
+        printf("    [ 6 ] Inventário - [ %c ]\n", controls[5]);
+        printf("    [ 7 ] Atacar - [ %c ]\n", controls[6]);
+        printf("\n[ x ] sair\n");
+
+        opt = getch();
+
+        if(opt >  48 && opt < 56){
+            system(CLEAR);
+            printf("Pressione a tecla desejada\n [ x ] cancelar");
+            key = '[';
+            while (key == '\033' || key == '['){
+                key = getch();
+                if(key != 'x'){
+                    controls[opt-49] = key;
+                }
+            }
+        }
+    }
 }
 
 Player create(){
@@ -283,9 +319,10 @@ Player create(){
     
 }
 
-int game(Player player, char i[7], int size){
+int game(Player player, char controls[8], int size){
     int **map;
     char opt;
+    int boss_x, boss_y;
 
     int timeToNextEnemy = 10, entityCount = 0;
     //Enemy *enemies;
@@ -302,8 +339,12 @@ int game(Player player, char i[7], int size){
     int r = rand() % 4;
     player.x = (r % 2) * (size-5) - (~r % 2) * 4;
     player.y = (r < 2) * (size-5) + (r > 1) * 4;
-
     map[player.y][player.x] = -1;
+    
+    // posiciona o boss no canto oposto ao player
+    boss_x = size - 1 - player.x;
+    boss_y = size - 1 - player.y;
+    map[boss_y][boss_x] = -10;
 
     // cria o mapa de distâncias
     int **distMap;
@@ -312,18 +353,25 @@ int game(Player player, char i[7], int size){
         distMap[i] = (int*) malloc(size*sizeof(int));
     }
 
+    int round = 0;
+
     // Começa o jogo
     while(1 == 1){
-        render(player, map, size, 2, timeToNextEnemy, distMap); // should I render after inputs??
+        render(player, map, size, 2, timeToNextEnemy, distMap); 
 
         opt = getch();
 
         // Passa o round toda vez que um input válido é recebido
-        if(strchr(i, opt)){
+        if(strchr(controls, opt)){
             // Passa o round...
 
             // limpa o buffer a cada ação
             strcpy(message, "\0");
+
+            // verifica se entrou no range da boss fight
+            if(abs(player.x - boss_x) <= 1 && abs(player.y - boss_y) <= 1){
+                //bossFight(player);
+            }
             // reduz o efeito de potencialização a cada turno
             if(player.stronger)
                 player.stronger--;
@@ -343,7 +391,7 @@ int game(Player player, char i[7], int size){
                 enemies[entityCount].x = pos / size;
                 enemies[entityCount].y = pos % size;
 
-                enemies[entityCount].hp = rand() % 10;
+                enemies[entityCount].hp = rand() % 10 + 1;
                 enemies[entityCount].frozen = 0;
 
                 entityCount++;
@@ -358,36 +406,39 @@ int game(Player player, char i[7], int size){
             for(int e = entityCount-1; e >= 0; e--){
                 if(enemies[e].hp <= 0){
                     // remove o inimigo do jogo
-                    map[enemies[e].y][enemies[e].x] = 0; // verificar se não deleta o player kkk
+                    map[enemies[e].y][enemies[e].x] = 0;
                     Enemy buffer = enemies[entityCount-1];
                     enemies[entityCount-1] = enemies[e];
                     enemies[e] = buffer;
                     entityCount--;
                 }else{
-                    if(!enemies[e].frozen){
+                    if(!enemies[e].frozen && !(round % ((player.class == 3)+1))){
                         enemyAction(&player, &enemies[e], map, distMap, size);
                     }else{
-                        enemies[e].frozen = false; // TODO: int ou bool?
+                        map[enemies[e].y][enemies[e].x] = -3;
+                        enemies[e].frozen = false;
                     }
                 }
             }
 
+            round++;
+
             // Switch/Case evitado pelos valores não serem integrais/constantes
-            if(opt == i[0]){ // Up
+            if(opt == controls[0]){ // Up
                 move(&player, map, 0, -1);
-            }else if(opt == i[1]){ // Down
+            }else if(opt == controls[1]){ // Down
                 move(&player, map, 0, 1);
-            }else if(opt == i[2]){ // Rigth
+            }else if(opt == controls[2]){ // Rigth
                 move(&player, map, 1, 0);
-            }else if(opt == i[3]){ // Left
+            }else if(opt == controls[3]){ // Left
                 move(&player, map, -1, 0);
-            }else if(opt == i[4]){
+            }else if(opt == controls[4]){
                 strcpy(message, ITL "procurando armadilhas..." RST);
                 checkTraps(&player, map, false);
-            }else if(opt == i[5]){
-                inventory(&player);
-            }else if(opt == i[6]){
-                attack(player, enemies, entityCount);
+            }else if(opt == controls[5]){
+                inventory(&player, controls[5]);
+            }else if(opt == controls[6]){
+                attack(player, enemies, entityCount, map);
             }
         }
     }
@@ -407,6 +458,7 @@ void move(Player * player, int ** grid, int dir_x, int dir_y){
             strcpy(message, ITL "você pisou em uma armadilha" RST);
             // armadilha é destruída após
         }
+
         // Verifica se é poção / item
         else if(grid[player->y + dir_y][player->x + dir_x] == 4 || grid[player->y + dir_y][player->x + dir_x] == 5){
             if(player->items < 9){
@@ -426,10 +478,11 @@ void move(Player * player, int ** grid, int dir_x, int dir_y){
 
         player->x += dir_x;
         player->y += dir_y;
+
     }
 }
 
-int attack(Player player, Enemy * enemies, int nenemies){
+int attack(Player player, Enemy * enemies, int nenemies, int ** grid){
     // distância de ataque
     // 3 para magos
     // 1 para o resto
@@ -438,19 +491,19 @@ int attack(Player player, Enemy * enemies, int nenemies){
         // se há um inimigo 'in range'
         if(abs(player.x - enemies[e].x) <= dist && abs(player.y - enemies[e].y) <= dist){
             if(rand() % 100 < (player.attr + 1 - enemies[e].dex)*20){
-                int hit = player.attr + 1 - enemies[e].intel;
+                int hit = player.attr + 1 - enemies[e].intel + (player.stronger > 0) * player.attr; // maior ataque se for 
                 if(player.class == 1){
                     hit += player.strength;
-                }else if(player.class == 2){
+                    sprintf(message, "acertou o monstro com %d hitpoints", hit);
+                }
+                if(player.class == 2){
                     if(rand() % 2 == 1){
                         enemies[e].frozen = true;
+                        sprintf(message, "congelou o monstro por 1 turno");
+                        grid[enemies[e].y][enemies[e].x] = -4;
                     }
                 }
-
-                int temp = enemies[e].hp;
                 enemies[e].hp -= hit;
-                sprintf(message, "acertou o monstro com %d hitpoints", temp - enemies[e].hp);
-                
             }
         }
     }
@@ -483,7 +536,7 @@ void checkTraps(Player * player, int ** grid, bool isAuto){
 }
 
 
-void inventory(Player * player){
+void inventory(Player * player, char key){
     bool exit = false; // TODO: change this name
     int opt;
 
@@ -493,7 +546,7 @@ void inventory(Player * player){
         printf("\n");
 
         for(int i = 0; i < player->items; i++){
-            printf("    ( %d)", i+1);
+            printf("    [ %d ]", i+1);
             if(player->inventory[i] == 4){
                 printf("poção de regeneração\n");
             }else{
@@ -501,7 +554,7 @@ void inventory(Player * player){
             }
         }
 
-        printf("    ( i) voltar ao jogo");
+        printf("    [ %c ] ) voltar ao jogo", key);
 
         opt = getch();
 
@@ -529,7 +582,7 @@ void inventory(Player * player){
             player->inventory[--player->items] = 0;
             
             exit = true;
-        }else if(opt == 'i'){
+        }else if(opt == key){
             exit = true;
         }
     }
@@ -674,26 +727,35 @@ void render(Player player, int ** map, int size, int fov, int ttl, int **  dist)
             if(i >= 0 && i < size && j >= 0 && j < size){
                 switch (map[i][j])
                     {
-                    case -3:
-                        printf(MAG "k " RST);
+                    case 0:
+                        printf(" . ");
                         break;
                     case 1:
-                        printf(GRN "# " RST);
+                        printf(GRN " # " RST);
                         break;
                     case -1:
-                        printf(YEL "@ " RST);
+                        printf(YEL " @ " RST);
                         break;
                     case -2:
-                        printf(RED "x " RST);
+                        printf(RED " x " RST);
                         break;
                     case 4:
-                        printf(GRN "º " RST);
+                        printf(GRN " o " RST);
                         break;
                     case 5:
-                        printf(BLU "º " RST);
+                        printf(CYN " o " RST);
+                        break;
+                    case -3:
+                        printf(MAG " k " RST);
+                        break;
+                    case -4:
+                        printf(BLU " k " RST);
+                        break;
+                    case -10:
+                        printf(BLD YEL " m " RST);
                         break;
                     default:
-                        printf("..");
+                        printf(" . ");
                         break;
                     }
             }
@@ -707,9 +769,14 @@ void render(Player player, int ** map, int size, int fov, int ttl, int **  dist)
     printf("\n");
 
     // HUD
-    printf("HP: %d/%d   ", player.hp, player.maxhp);
+    if(player.hp > player.maxhp * 0.2){
+        printf(BLD "HP:" RST "%d/%d   ", player.hp, player.maxhp);
+    }else{ // HP fica vermelho quando chega a 20% do HP maximo
+        printf(BLD RED "HP:" RST RED "%d" RST "/%d   ", player.hp, player.maxhp);
+    }
+
     if(player.stronger){
-        printf("Pot: %d Rounds", player.stronger);
+        printf("Pot: " BLU "%d" RST " Rounds", player.stronger);
     }
     printf("    %d", ttl);
     printf("\n");
@@ -736,13 +803,16 @@ void render(Player player, int ** map, int size, int fov, int ttl, int **  dist)
                         printf(BLU "x " RST);
                         break;
                     case 4:
-                        printf(GRN "º " RST);
+                        printf(GRN "o " RST);
                         break;
                     case 5:
-                        printf(BLU "º " RST);
+                        printf(BLU "o " RST);
                         break;
                     case -3:
                         printf(MAG "k " RST);
+                        break;
+                    case -10:
+                        printf(BLD YEL "m " RST);
                         break;
                     default:
                         printf(". ");
@@ -752,42 +822,6 @@ void render(Player player, int ** map, int size, int fov, int ttl, int **  dist)
             printf("\n");
         }
         printf("%d %d\n", player.x, player.y);
-    }else if(DIST){
-        for(int i = 0; i < size; i++){
-            for(int j = 0; j < size; j++){
-                switch (map[i][j])
-                    {
-                    case 1:
-                        printf(" = ");
-                        break;
-                    case -1:
-                        printf(YEL " @ " RST);
-                        break;
-                    case -2:
-                        printf(RED " x " RST);
-                        break;
-                    case 2:
-                        printf(YEL " x " RST);
-                        break;
-                    case 3:
-                        printf(BLU " x " RST);
-                        break;
-                    case 4:
-                        printf(GRN " º " RST);
-                        break;
-                    case 5:
-                        printf(BLU " º " RST);
-                        break;
-                    case -3:
-                        printf(MAG " k " RST);
-                        break;
-                    default:
-                        printf(" %02d", dist[i][j]);
-                        break;
-                    }
-            }
-            printf("\n");
-        }
     }
 }
 
