@@ -86,7 +86,7 @@ int input(); // talvez vai morrer
 int ** genMap(int size);
 void walk(int x, int y, int ** grid, int size);
 
-int game(Player player, char controls[8], int size);
+int game(Player player, char controls[9], int size);
 
 int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
@@ -97,10 +97,11 @@ int attack(Player player, Enemy * enemies, int nenemies, int ** grid);
 void updateDist(Player player, int ** grid, int ** distMap, int size);
 void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, int size);
 
-void render(Player player, int ** map, int size, int fov, int ttl, int ** distMap);
+void render(Player player, int ** map, int size);
 void inventory(Player * player, char key);
 
-void bossFight(Player player);
+bool riddle(int n);
+bool bossFight(Player player, int ** map, int size);
 
 Player create();
 Enemy spawnEnemy(int ** grid, int size, Player player);
@@ -110,7 +111,7 @@ int main(int argc, char *argv[]){
     srand(time(NULL));
 
     // default input vector
-    char controls[8] = {'A', 'B', 'C', 'D', 'c', 'i', 'e','\0'};
+    char controls[9] = {'A', 'B', 'C', 'D', 'c', 'i', 'e', 's','\0'};
     Player player;
 
     int opt = 0;
@@ -160,7 +161,7 @@ int sign(int x){
 }
 
 void config(char * controls){
-    char opt = 0, key = 0;
+    char opt = 0, key = 0, *swap;
     
     while (opt != 'x'){
         system(CLEAR);
@@ -173,17 +174,22 @@ void config(char * controls){
         printf("    [ 5 ] Verificar armadilhas - [ %c ]\n", controls[4]);
         printf("    [ 6 ] Inventário - [ %c ]\n", controls[5]);
         printf("    [ 7 ] Atacar - [ %c ]\n", controls[6]);
+        printf("    [ 8 ] Salvar - [ %c ]\n", controls[7]);
         printf("\n[ x ] sair\n");
 
         opt = getch();
 
-        if(opt >  48 && opt < 56){
+        if(opt >  48 && opt < 57){
             system(CLEAR);
             printf("Pressione a tecla desejada\n [ x ] cancelar");
             key = '[';
             while (key == '\033' || key == '['){
                 key = getch();
                 if(key != 'x'){
+                    // troca a entrada para previnir entradas repetidas
+                    if(swap = strchr(controls, key)){
+                        *swap = controls[opt-49];
+                    }
                     controls[opt-49] = key;
                 }
             }
@@ -356,8 +362,8 @@ int game(Player player, char controls[8], int size){
     int round = 0;
 
     // Começa o jogo
-    while(1 == 1){
-        render(player, map, size, 2, timeToNextEnemy, distMap); 
+    while(1){
+        render(player, map, size); 
 
         opt = getch();
 
@@ -370,7 +376,7 @@ int game(Player player, char controls[8], int size){
 
             // verifica se entrou no range da boss fight
             if(abs(player.x - boss_x) <= 1 && abs(player.y - boss_y) <= 1){
-                //bossFight(player);
+                return bossFight(player, map, size);
             }
             // reduz o efeito de potencialização a cada turno
             if(player.stronger)
@@ -396,33 +402,10 @@ int game(Player player, char controls[8], int size){
 
                 entityCount++;
 
-                timeToNextEnemy = 10 + rand() % 20;
+                timeToNextEnemy = 10 + rand() % 20; // change this later
             }
 
-            // Atualiza as distâncias
-            updateDist(player, map, distMap, size);
-
-            // atualiza os monstros
-            for(int e = entityCount-1; e >= 0; e--){
-                if(enemies[e].hp <= 0){
-                    // remove o inimigo do jogo
-                    map[enemies[e].y][enemies[e].x] = 0;
-                    Enemy buffer = enemies[entityCount-1];
-                    enemies[entityCount-1] = enemies[e];
-                    enemies[e] = buffer;
-                    entityCount--;
-                }else{
-                    if(!enemies[e].frozen && !(round % ((player.class == 3)+1))){
-                        enemyAction(&player, &enemies[e], map, distMap, size);
-                    }else{
-                        map[enemies[e].y][enemies[e].x] = -3;
-                        enemies[e].frozen = false;
-                    }
-                }
-            }
-
-            round++;
-
+            // Input Handling
             // Switch/Case evitado pelos valores não serem integrais/constantes
             if(opt == controls[0]){ // Up
                 move(&player, map, 0, -1);
@@ -439,6 +422,40 @@ int game(Player player, char controls[8], int size){
                 inventory(&player, controls[5]);
             }else if(opt == controls[6]){
                 attack(player, enemies, entityCount, map);
+            }
+
+            // Atualiza as distâncias
+            updateDist(player, map, distMap, size);
+
+            // atualiza os monstros
+            for(int e = entityCount-1; e >= 0; e--){
+                if(enemies[e].hp <= 0){
+                    // remove o inimigo do jogo
+                    map[enemies[e].y][enemies[e].x] = 0;
+                    Enemy buffer = enemies[entityCount-1];
+                    enemies[entityCount-1] = enemies[e];
+                    enemies[e] = buffer;
+                    entityCount--;
+                }else{
+                    if(!enemies[e].frozen ){
+                        if(!(round % ((player.class == 3)+1))){
+                            enemyAction(&player, &enemies[e], map, distMap, size);
+                        }
+                        map[enemies[e].y][enemies[e].x] = -3;
+                    }else{
+                        map[enemies[e].y][enemies[e].x] = -4;
+                        enemies[e].frozen = false;
+                    }
+                }
+            }
+
+            round++;
+
+            if(player.hp <= 0){
+                system(CLEAR);
+                printf(RED BLD "GAME OVER!" RST);
+                getch();
+                return 0;
             }
         }
     }
@@ -486,15 +503,15 @@ int attack(Player player, Enemy * enemies, int nenemies, int ** grid){
     // distância de ataque
     // 3 para magos
     // 1 para o resto
-    int dist = (player.class % 2) * 2 + 1; 
+    int dist = (player.class == 2) * 1 + 1; 
     for(int e = 0; e < nenemies; e++){
         // se há um inimigo 'in range'
         if(abs(player.x - enemies[e].x) <= dist && abs(player.y - enemies[e].y) <= dist){
             if(rand() % 100 < (player.attr + 1 - enemies[e].dex)*20){
                 int hit = player.attr + 1 - enemies[e].intel + (player.stronger > 0) * player.attr; // maior ataque se for 
+                sprintf(message, "acertou o monstro com %d hitpoints", hit);
                 if(player.class == 1){
                     hit += player.strength;
-                    sprintf(message, "acertou o monstro com %d hitpoints", hit);
                 }
                 if(player.class == 2){
                     if(rand() % 2 == 1){
@@ -546,15 +563,15 @@ void inventory(Player * player, char key){
         printf("\n");
 
         for(int i = 0; i < player->items; i++){
-            printf("    [ %d ]", i+1);
+            printf("    [ %d ] ", i+1);
             if(player->inventory[i] == 4){
-                printf("poção de regeneração\n");
+                printf(BLU "poção de regeneração\n" RST);
             }else{
-                printf("poção de potencialização\n");
+                printf(GRN "poção de potencialização\n" RST);
             }
         }
 
-        printf("    [ %c ] ) voltar ao jogo", key);
+        printf("    [ %c ] voltar ao jogo", key);
 
         opt = getch();
 
@@ -564,10 +581,7 @@ void inventory(Player * player, char key){
                 strcpy(message, "usou " GRN "poção de regeneração" RST);
 
                 // regenera a vida do player
-                player->hp += player->constitution;
-                // limita a vida
-                if(player->hp > player->maxhp)
-                    player->hp = player->maxhp;
+                player->hp = min(player->hp + player->constitution, player->maxhp);
             }else{
                 strcpy(message, "usou " BLU "poção de potencialização" RST);
                 
@@ -715,14 +729,96 @@ void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, in
     }
 }
 
+bool bossFight(Player player, int ** map, int size){
+    char opt, lines[20][100] = {"Você me achou!", "Hora do desafio final.", "Mas antes...", "Vamos brincar um pouco de jokenpo :)", " ", " ", " ", " ", "Agora sim!", "O desafio final!", " ", " ", " ", "Parabéns!!", "Você completou o desafio final", "Vamos sair daqui agora.", ".", "..", "...", "Onde é a saída mesmo??"};
+    int i = 0, r, pastRiddles[2] = {-1,-1};
+    while(player.hp > 0){
+        render(player, map, size);
+        
+        opt = getch();
+        if(opt != '\033' &&  opt != '['){
+            if(i > 4 && i < 8){
+                // pedra < papel < tesoura
+                switch((input("    [ 1 ] pedra\n    [ 2 ] papel\n    [ 3 ] tesoura", 3) - rand() % 3) % 3){
+                    case 2:
+                        strcpy(lines[i], "Ótima escolha");
+                        break;
+                    case 1:
+                        strcpy(lines[i], "Não vale me copiar :3");
+                        break;
+                    default:
+                        strcpy(lines[i], "Que pena, eu ganhei xD");
+                        player.hp--;
+                }
+            }else if(i > 10 && i < 14){
+                r = pastRiddles[0];
+                while(r == pastRiddles[0] || r == pastRiddles[1]){
+                    r = rand() % 10;
+                }
+                pastRiddles[i%2] = r;
+                if(riddle(r) == 0){
+                    strcpy(lines[i], "ERRROU!");
+                    player.hp--;
+                }else{
+                    strcpy(lines[i], "Acerto mizeravi");
+                }
+            }else if(i > 20){
+                return 1;
+            }
+            sprintf(message, ITL "%s" RST, lines[i]);
+            i++;
+        }
+    }
+    system(CLEAR);
+    printf(RED BLD "GAME OVER!" RST);
+    getch();
+    return 0;
+}
 
-void render(Player player, int ** map, int size, int fov, int ttl, int **  dist){ // delete ttl
+// Charadas
+bool riddle(int n){
+    switch (n)
+    {
+        case 1:
+            return input("Quatro irmãs estão em um quarto: Ana está lendo, Kátia está jogando xadrez, Taca está cozinhando. O que a quarta irmã está fazendo?\n\
+            [ 1 ] matando orcs\n  [ 2 ] forjando uma espada\n   [ 3 ] jogando xadrez ", 3) == 3;
+        case 2:
+            return input("Um homem estava indo para a Bahia com suas 5 irmãs. Cada irmã carregava 5 caixas, cada caixa tinha 5 gatos, cada gato estava com 5 filhotes. Quantos estavam indo para a Bahia?\n\
+            [ 1 ] 756\n   [ 2 ] 781\n    [ 3 ] Bahia? ", 3) == 1;
+        case 3:
+            return input("Você entra em uma sala escura. No quarto há uma estufa à gás, uma luminária de querosene e uma vela. Há uma caixa de fósforo com um só fósforo em seu bolso. O que você acende primeiro.\n\
+            [ 1 ] luminária\n   [ 2 ] vela\n   [ 3 ] fósforo", 3) == 3;
+        case 4:
+            return input("Um empresário comprou um cavalo de 10 moedas e vendeu por 20. Logo comprou o mesmo cavalo por 30 moedas e vendeu por 40. Qual é o lucro total do empresário nessas duas transações?\n\
+            [ 1 ] 10\n   [ 2 ] 20\n   [ 3 ] 40 ", 3) == 2;
+        case 5:
+            return input("Um balão aerostático é levado por uma corrente de ar até o sul. Em que direção vão ondular as bandeiras da cesta?\n\
+            [ 1 ] sul\n   [ 2 ] nenhuma\n   [ 3 ] norte", 3) == 2;
+        case 6:
+            return input("Um homem roubou 80 moedas da caixa de um mercante. Mais tarde, usou 60 moedas para comprar uma espada do mercante, usando as moedas que roubou. Qual foi o prejuízo do mercante?\n\
+            [ 1 ] 80\n   [ 2 ] 20\n   [ 3 ] 140 ", 3) == 1;
+        case 7:
+            return input("Dois pais e dois filhos sentaram-se para comer ovos no café da manhã. Cada um comeu um ovo. Quantos ovos eles comeram no total?\n\
+            [ 1 ] 1\n   [ 2 ] 3\n   [ 3 ] 5 ", 3) == 2;
+        case 8:
+            return input("Se 3 lenhadores derrubam 3 árvores a cada 3 horas, quanto tempo levarão 100 lenhadores para derrubarem 100 árvores?\n\
+            [ 1 ] 100\n   [ 2 ] 3\n   [ 3 ] 300 ", 3) == 2;
+        case 9:
+            return input("Você está diante de três portas. Na primeira há um assassino. Na segunda há um leão que não come há um ano. Na terceira há um incêndio. Qual porta é mais segura?\n\
+            [ 1 ] assassino\n   [ 2 ] leão\n   [ 3 ] incêndio ", 3) == 2;
+        case 0:
+            return input("Há três baús, um contendo 100 moedas de ouro, um contendo 100 moedas de prata, e um contendo 50/50. Os rótulos estão trocados, porém. Você pode tirar uma moeda de um dos baús para identificar qual baú contém apenas moedas de ouro. De qual baú você retira a moeda?\n\
+            [ 1 ] só ouro\n   [ 2 ] só prata\n   [ 3 ] 50/50 ", 3) == 3;
+    }
+}
+
+void render(Player player, int ** map, int size){
     system(CLEAR);
     printf("\n");
     // 
-    for(int i = player.y - fov; i <= player.y + fov; i++){
+    for(int i = player.y - 2; i <= player.y + 2; i++){
         printf("    ");
-        for(int j = player.x - fov; j <= player.x + fov; j++){
+        for(int j = player.x - 2; j <= player.x + 2; j++){
             
             if(i >= 0 && i < size && j >= 0 && j < size){
                 switch (map[i][j])
@@ -778,7 +874,6 @@ void render(Player player, int ** map, int size, int fov, int ttl, int **  dist)
     if(player.stronger){
         printf("Pot: " BLU "%d" RST " Rounds", player.stronger);
     }
-    printf("    %d", ttl);
     printf("\n");
     printf("%s\n", message);
 
