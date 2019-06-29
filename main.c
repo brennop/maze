@@ -73,11 +73,6 @@ typedef struct{
     int frozen;
 }Enemy;
 
-// Use it later, if has rendering/raytracing
-struct Trap{
-    int x, y;
-};
-
 char message[100]; // Buffer de mensagens no estilo Rogue/Nethack
 bool isPlaying = false; // Variável para indicar se o jogo está rodando ou pausado
 
@@ -86,7 +81,7 @@ int input(); // talvez vai morrer
 int ** genMap(int size);
 void walk(int x, int y, int ** grid, int size);
 
-int game(Player player, char controls[9], int size);
+int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls);
 
 int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
@@ -103,6 +98,9 @@ void inventory(Player * player, char key);
 bool riddle(int n);
 bool bossFight(Player player, int ** map, int size);
 
+bool save(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls);
+bool load(Player * player, int *** map, int * size, Enemy * enemies, int * nenemies, char * controls);
+
 Player create();
 Enemy spawnEnemy(int ** grid, int size, Player player);
 void config(char * controls);
@@ -113,18 +111,60 @@ int main(int argc, char *argv[]){
     // default input vector
     char controls[9] = {'A', 'B', 'C', 'D', 'c', 'i', 'e', 's','\0'};
     Player player;
+    Enemy enemies[10];
+    int nenemies;
+    int size;
+    int ** map;
+    bool saveExists = false;
+
+    FILE* savefile;
+    if(savefile = fopen("maze.save", "r")){
+        saveExists = true;
+        fclose(savefile);
+    }
+
 
     int opt = 0;
     while (opt != 52){ // 52 ~> 4 in ascii
         system(CLEAR);
         printf("\n");
-        printf("    [ 1 ] Continuar\n    [ 2 ] Novo Jogo\n    [ 3 ] Opções\n    [ 4 ] Sair");
+        if(saveExists){
+            printf("    [ 1 ] Continuar\n    [ 2 ] Novo Jogo\n    [ 3 ] Opções\n    [ 4 ] Sair");
+        }else{
+            printf("\n    [ 2 ] Novo Jogo\n    [ 3 ] Opções\n    [ 4 ] Sair");
+        }
 
         opt = getch();
         switch (opt){
+            case '1':
+                if(saveExists){
+                    // if load then game
+                    load(&player, &map, &size, enemies, &nenemies, controls);
+                    game(player, map, size, enemies, nenemies, controls);
+                }
+                break;
             case '2':
                 player = create();
-                game(player, controls, 33);
+                Enemy enemies[10];
+                nenemies = 0;
+                size = 33;
+
+                map = genMap(size);
+
+                spawn(map, size, size/4, 2);  // Spawn de size/4 armadilhas (representação 2)
+                spawn(map, size, size/10, 4); // Spawn de size/4 poções de cura (representação 4)
+                spawn(map, size, size/10, 5); // Spawn de size/4 poções de enhance (representação 5)
+
+                // Spawn do personagem em algum canto do labirinto
+                int r = rand() % 4;
+                player.x = (r % 2) * (size-5) - (~r % 2) * 4;
+                player.y = (r < 2) * (size-5) + (r > 1) * 4;
+                map[player.y][player.x] = -1;
+
+                // posiciona o boss no canto oposto ao player
+                map[size - 1 - player.y][size - 1 - player.x] = -10;
+                
+                game(player, map, size, enemies, nenemies, controls);
                 break;
             case '3':
                 config(controls);
@@ -325,32 +365,10 @@ Player create(){
     
 }
 
-int game(Player player, char controls[8], int size){
-    int **map;
+int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls){
     char opt;
-    int boss_x, boss_y;
 
-    int timeToNextEnemy = 10, entityCount = 0;
-    //Enemy *enemies;
-    //enemies = (Enemy*) malloc(10*sizeof(Enemy));
-    Enemy enemies[10];
-
-    map = genMap(size);
-
-    spawn(map, size, size/4, 2);  // Spawn de size/4 armadilhas (representação 2)
-    spawn(map, size, size/10, 4); // Spawn de size/4 poções de cura (representação 4)
-    spawn(map, size, size/10, 5); // Spawn de size/4 poções de enhance (representação 5)
-
-    // Spawn do personagem em algum canto do labirinto
-    int r = rand() % 4;
-    player.x = (r % 2) * (size-5) - (~r % 2) * 4;
-    player.y = (r < 2) * (size-5) + (r > 1) * 4;
-    map[player.y][player.x] = -1;
-    
-    // posiciona o boss no canto oposto ao player
-    boss_x = size - 1 - player.x;
-    boss_y = size - 1 - player.y;
-    map[boss_y][boss_x] = -10;
+    int timeToNextEnemy = 10;
 
     // cria o mapa de distâncias
     int **distMap;
@@ -375,32 +393,37 @@ int game(Player player, char controls[8], int size){
             strcpy(message, "\0");
 
             // verifica se entrou no range da boss fight
-            if(abs(player.x - boss_x) <= 1 && abs(player.y - boss_y) <= 1){
-                return bossFight(player, map, size);
+            for(int i = player.y-1; i <player.y+2; i++){
+                for(int j = player.x-1; j < player.x+2; j++){
+                    if(map[i][j] == -10){
+                        return bossFight(player, map, size);
+                    }
+                }
             }
+            
             // reduz o efeito de potencialização a cada turno
             if(player.stronger)
                 player.stronger--;
 
             // Spawn dos monstros
-            if(!(--timeToNextEnemy) && entityCount < 9){
+            if(!(--timeToNextEnemy) && nenemies < 9){
 
                 // TODO criar um construtor de inimigos
                 int points = 8;
-                enemies[entityCount].atk = rand() % 5;
-                points -= enemies[entityCount].atk;
-                enemies[entityCount].dex = rand() % min(points,5);
-                points -= enemies[entityCount].dex;
-                enemies[entityCount].intel = rand() % min(points,5);
+                enemies[nenemies].atk = rand() % 5;
+                points -= enemies[nenemies].atk;
+                enemies[nenemies].dex = rand() % min(points,5);
+                points -= enemies[nenemies].dex;
+                enemies[nenemies].intel = rand() % min(points,5);
                 
                 int pos = spawn(map, size, 1, -3);
-                enemies[entityCount].x = pos / size;
-                enemies[entityCount].y = pos % size;
+                enemies[nenemies].x = pos / size;
+                enemies[nenemies].y = pos % size;
 
-                enemies[entityCount].hp = rand() % 10 + 1;
-                enemies[entityCount].frozen = 0;
+                enemies[nenemies].hp = rand() % 10 + 1;
+                enemies[nenemies].frozen = 0;
 
-                entityCount++;
+                nenemies++;
 
                 timeToNextEnemy = 10 + rand() % 20; // change this later
             }
@@ -421,21 +444,23 @@ int game(Player player, char controls[8], int size){
             }else if(opt == controls[5]){
                 inventory(&player, controls[5]);
             }else if(opt == controls[6]){
-                attack(player, enemies, entityCount, map);
+                attack(player, enemies, nenemies, map);
+            }else if(opt == controls[7]){
+                save(player, map, size, enemies, nenemies, controls);
             }
 
             // Atualiza as distâncias
             updateDist(player, map, distMap, size);
 
             // atualiza os monstros
-            for(int e = entityCount-1; e >= 0; e--){
+            for(int e = nenemies-1; e >= 0; e--){
                 if(enemies[e].hp <= 0){
                     // remove o inimigo do jogo
                     map[enemies[e].y][enemies[e].x] = 0;
-                    Enemy buffer = enemies[entityCount-1];
-                    enemies[entityCount-1] = enemies[e];
+                    Enemy buffer = enemies[nenemies-1];
+                    enemies[nenemies-1] = enemies[e];
                     enemies[e] = buffer;
-                    entityCount--;
+                    nenemies--;
                 }else{
                     if(!enemies[e].frozen ){
                         if(!(round % ((player.class == 3)+1))){
@@ -565,9 +590,9 @@ void inventory(Player * player, char key){
         for(int i = 0; i < player->items; i++){
             printf("    [ %d ] ", i+1);
             if(player->inventory[i] == 4){
-                printf(BLU "poção de regeneração\n" RST);
+                printf(GRN "poção de regeneração\n" RST);
             }else{
-                printf(GRN "poção de potencialização\n" RST);
+                printf(BLU "poção de potencialização\n" RST);
             }
         }
 
@@ -918,6 +943,44 @@ void render(Player player, int ** map, int size){
         }
         printf("%d %d\n", player.x, player.y);
     }
+}
+
+bool save(Player player, int ** grid, int size, Enemy * enemies, int nenemies, char * controls){
+    FILE* savefile;
+    savefile = fopen("maze.save", "wb");
+
+    fwrite(&player, sizeof(Player), 1, savefile);
+    fwrite(&size, sizeof(int), 1, savefile);
+    for(int i = 0; i < size; i++){
+        fwrite(grid[i], sizeof(int), size, savefile);
+    }
+    fwrite(&nenemies, sizeof(int), 1, savefile);
+    fwrite(enemies, sizeof(Enemy), nenemies, savefile);
+    fwrite(controls, sizeof(char), 9, savefile);
+
+    fclose(savefile);
+    strcpy(message, "Jogo Salvo");
+}
+
+bool load(Player * player, int *** grid, int * size, Enemy * enemies, int * nenemies, char * controls){
+    FILE* savefile;
+    savefile = fopen("maze.save", "rb");
+    
+
+    fread(player, sizeof(Player), 1, savefile);
+    fread(size, sizeof(int), 1, savefile);
+    
+    *grid = (int **) malloc(*size * sizeof(int*));
+    for(int i = 0; i < *size; i++){
+        grid[0][i] = (int *) malloc(*size * sizeof(int));
+        fread(grid[0][i], sizeof(int), *size, savefile);
+    }
+    
+    fread(nenemies, sizeof(int), 1, savefile);
+    fread(enemies, sizeof(Enemy), *nenemies, savefile);
+    fread(controls, sizeof(char), 9, savefile);
+
+    fclose(savefile);
 }
 
 
