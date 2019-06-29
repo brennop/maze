@@ -6,6 +6,7 @@
 
 #define rows 33
 #define cols 33
+#define size 4
 
 void render(int grid[rows][cols], int t,int x, int y){
     system("clear");
@@ -58,30 +59,32 @@ void render2(int grid[rows][cols], int t, int x, int y){
 void recursion(int x, int y, int grid[rows][cols]){
     
 
-    for(int i = y-1; i < y+2; i++){
-        for(int j = x-1; j < x+2; j++){
+    for(int i = y-(size/2)+1; i < y+(size/2); i++){
+        for(int j = x-(size/2)+1; j < x+(size/2); j++){
             grid[j][i] = 0; // mark cells as visited
         }
     }
+
+    render(grid, 50, x, y);
 
     for(int i = 0; i < 4; i++){
         int neighbours[4];
         int k = 0;
 
-        if(y - 4 > 0 && grid[x][y - 4] != 0){ //up
-            neighbours[k] = x + rows * (y - 4);
+        if(y - size > 0 && grid[x][y - size] != 0){ //up
+            neighbours[k] = x + rows * (y - size);
             k++;
         }
-        if(x - 4 > 0 && grid[x - 4][y] != 0){ // left
-            neighbours[k] = x - 4 + rows * y;
+        if(x - size > 0 && grid[x - size][y] != 0){ // left
+            neighbours[k] = x - size + rows * y;
             k++;
         }
-        if(y + 4 < rows -1 && grid[x][y + 4] != 0){ // down
-            neighbours[k] = x + rows * (y + 4);
+        if(y + size < rows -1 && grid[x][y + size] != 0){ // down
+            neighbours[k] = x + rows * (y + size);
             k++;
         }
-        if(x + 4 < cols -1 && grid[x + 4][y] != 0){ // right
-            neighbours[k] = x + 4 + rows * y;
+        if(x + size < cols -1 && grid[x + size][y] != 0){ // right
+            neighbours[k] = x + size + rows * y;
             k++;
         }
     
@@ -89,8 +92,8 @@ void recursion(int x, int y, int grid[rows][cols]){
             int r = rand() % k;
             int next_x = neighbours[r] % rows, next_y = neighbours[r] / rows;
 
-            for(int i = -1; i < 2; i++){
-                for(int j = -1; j < 2; j++){
+            for(int i = -size/2 + 1; i < size/2; i++){
+                for(int j = -size/2 + 1; j < size/2; j++){
                     grid[(next_x + x)/2 + j][(y + next_y)/2 + i] =0;
                 }
             }
@@ -115,7 +118,7 @@ void path(int x, int y, int distMap[rows][cols], int dis){
 
         render2(distMap,20,x,y);
 
-        if(distMap[y - 1][x] != INT_MAX){ //up
+        if(distMap[y - 1][x] == 0){ //up
             queue[q++] = x * rows + (y - 1);
             distMap[y-1][x] = dis;
         }
@@ -156,7 +159,7 @@ int main(){
 
     
 
-    recursion(4,4,grid);
+    recursion(size,size,grid);
 
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){

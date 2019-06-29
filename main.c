@@ -15,6 +15,7 @@
 #endif
 
 // terminal coloridinho
+#define BLK "\x1B[30m"
 #define RED "\x1B[31m"
 #define GRN "\x1B[32m"
 #define YEL "\x1B[33m"
@@ -23,6 +24,7 @@
 #define CYN "\x1B[36m"
 #define WHT "\x1B[37m"
 #define RST "\x1B[0m"
+#define GRNB "\x1B[42m"
 
 // outros efeitos top
 #define BLD "\x1B[1m"
@@ -36,7 +38,6 @@
 #define TRAP3 3
 
 bool DEBUG = false;
-bool DIST = false;
 
 /*Função de captura de entrada do teclado */
 int getch() {
@@ -102,7 +103,7 @@ bool save(Player player, int ** map, int size, Enemy * enemies, int nenemies, ch
 bool load(Player * player, int *** map, int * size, Enemy * enemies, int * nenemies, char * controls);
 
 Player create();
-Enemy spawnEnemy(int ** grid, int size, Player player);
+Enemy createEnemy(Player player, int **map, int size);
 void config(char * controls);
 
 int main(int argc, char *argv[]){
@@ -112,9 +113,7 @@ int main(int argc, char *argv[]){
     char controls[9] = {'A', 'B', 'C', 'D', 'c', 'i', 'e', 's','\0'};
     Player player;
     Enemy enemies[10];
-    int nenemies;
-    int size;
-    int ** map;
+    int nenemies, size, **map;
     bool saveExists = false;
 
     FILE* savefile;
@@ -144,11 +143,11 @@ int main(int argc, char *argv[]){
                 }
                 break;
             case '2':
+                size = input("    Dificuldade\n    [ 1 ] 30x30\n    [ 2 ] 50x50\n    [ 3 ] 90x90", 3);
+                size = (size == 1) * 37 + (size == 2) * 57 + (size == 3) * 97;
                 player = create();
                 Enemy enemies[10];
                 nenemies = 0;
-                size = 33;
-
                 map = genMap(size);
 
                 spawn(map, size, size/4, 2);  // Spawn de size/4 armadilhas (representação 2)
@@ -164,6 +163,10 @@ int main(int argc, char *argv[]){
                 // posiciona o boss no canto oposto ao player
                 map[size - 1 - player.y][size - 1 - player.x] = -10;
                 
+                system(CLEAR);
+                printf("    Durante a festa real, pessoas beberam um pouco além da conta. O rei decidiu que seria uma boa ideia que todos fossem se aventurar no labirinto do castelo. A noite caiu e você está com muita dor de cabeça.\n\n [ x ] Continuar");
+                getch();
+
                 game(player, map, size, enemies, nenemies, controls);
                 break;
             case '3':
@@ -242,21 +245,21 @@ Player create(){
     int sum = 0;
 
     p.race = input("    " RED "Raça" RST "\n    [ 1 ] Humano\n    [ 2 ] Anão\n    [ 3 ] Elfo", 3);
-    p.aling = input("    Alinhamento\n    [ 1 ] Mal\n    [ 2 ] Neutro\n    [ 3 ] Bom", 3);
+    p.aling = input("    " RED "Alinhamento" RST "\n    [ 1 ] Mal\n    [ 2 ] Neutro\n    [ 3 ] Bom", 3);
     if(p.aling == 3){
-        p.class = input("    Profissão\n    [ 1 ] Gurreiro\n    [ 2 ] Mago", 2);
+        p.class = input("    " RED "Profissão" RST "\n    [ 1 ] Gurreiro\n    [ 2 ] Mago", 2);
     }else{
-        p.class = input("    Profissão\n    [ 1 ] Gurreiro\n    [ 2 ] Mago\n    [ 3 ] Ladino", 3);
+        p.class = input("    " RED "Profissão" RST "\n    [ 1 ] Gurreiro\n    [ 2 ] Mago\n    [ 3 ] Ladino", 3);
     }
 
-    /* system(CLEAR);
+    system(CLEAR);
     printf("    História Prévia\n");
-    scanf("%*c%*[^\n]s"); */
+    while(getchar() != '\n');
 
     if(p.race == 2){
-        p.size = input("    Porte\n    [ 1 ] Médio\n    [ 2 ] Pequeno", 2) + 1;
+        p.size = input("    " RED "Porte" RST "\n    [ 1 ] Médio\n    [ 2 ] Pequeno", 2) + 1;
     }else{
-        p.size = input("    Porte\n    [ 1 ] Grande\n    [ 2 ] Médio\n    [ 3 ] Pequeno", 3);
+        p.size = input("    " RED "Porte" RST "\n    [ 1 ] Grande\n    [ 2 ] Médio\n    [ 3 ] Pequeno", 3);
     }
 
     p.strength = 0;
@@ -348,9 +351,9 @@ Player create(){
         p.constitution -= 1 * (p.constitution > 0);
     }
 
-    // HP é 7 * Constituição
+    // HP é 5 * Constituição
     // Se constiuição for zero, HP = 1
-    p.hp = p.constitution * 7 + !p.constitution;
+    p.hp = p.constitution * 5 + !p.constitution;
     p.maxhp = p.hp;
 
     // Deixa o inventário vazio
@@ -365,10 +368,30 @@ Player create(){
     
 }
 
+Enemy createEnemy(Player player, int **map, int size){
+    Enemy e;
+    int points = 8;
+
+    e.atk = max(max(rand() % 5 + 1, player.dexterity), player.intelligence);
+    points -= e.atk;
+    e.dex = rand() % min(points, 5);
+    points -= e.dex;
+    e.intel = rand() % min(points,5);
+    
+    int pos = spawn(map, size, 1, -3);
+    e.x = pos / size;
+    e.y = pos % size;
+
+    e.hp = rand() % 10 + 1;
+    e.frozen = 0;
+
+    return e;
+}
+
 int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls){
     char opt;
 
-    int timeToNextEnemy = 10;
+    int timeToNextEnemy = 15;
 
     // cria o mapa de distâncias
     int **distMap;
@@ -407,25 +430,8 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
 
             // Spawn dos monstros
             if(!(--timeToNextEnemy) && nenemies < 9){
-
-                // TODO criar um construtor de inimigos
-                int points = 8;
-                enemies[nenemies].atk = rand() % 5;
-                points -= enemies[nenemies].atk;
-                enemies[nenemies].dex = rand() % min(points,5);
-                points -= enemies[nenemies].dex;
-                enemies[nenemies].intel = rand() % min(points,5);
-                
-                int pos = spawn(map, size, 1, -3);
-                enemies[nenemies].x = pos / size;
-                enemies[nenemies].y = pos % size;
-
-                enemies[nenemies].hp = rand() % 10 + 1;
-                enemies[nenemies].frozen = 0;
-
-                nenemies++;
-
-                timeToNextEnemy = 10 + rand() % 20; // change this later
+                enemies[nenemies++] = createEnemy(player, map, size);
+                timeToNextEnemy = 15 + rand() % 15;
             }
 
             // Input Handling
@@ -746,7 +752,7 @@ void enemyAction(Player * player, Enemy * enemy, int ** grid, int ** distMap, in
             }
         }else{ // atacar
             if(rand() % 100 < (enemy->atk + 1 - player->dexterity)*20){
-                int hit = enemy->atk + 1 - player->intelligence;
+                int hit = max(enemy->atk + 1 - player->intelligence, 0);
                 sprintf(message, "monstro atacou com %d hitpoints", hit);
                 player->hp -= hit;
             }
@@ -806,34 +812,34 @@ bool riddle(int n){
     {
         case 1:
             return input("Quatro irmãs estão em um quarto: Ana está lendo, Kátia está jogando xadrez, Taca está cozinhando. O que a quarta irmã está fazendo?\n\
-            [ 1 ] matando orcs\n  [ 2 ] forjando uma espada\n   [ 3 ] jogando xadrez ", 3) == 3;
+    [ 1 ] matando orcs\n  [ 2 ] forjando uma espada\n   [ 3 ] jogando xadrez ", 3) == 3;
         case 2:
             return input("Um homem estava indo para a Bahia com suas 5 irmãs. Cada irmã carregava 5 caixas, cada caixa tinha 5 gatos, cada gato estava com 5 filhotes. Quantos estavam indo para a Bahia?\n\
-            [ 1 ] 756\n   [ 2 ] 781\n    [ 3 ] Bahia? ", 3) == 1;
+    [ 1 ] 756\n   [ 2 ] 781\n    [ 3 ] Bahia? ", 3) == 1;
         case 3:
             return input("Você entra em uma sala escura. No quarto há uma estufa à gás, uma luminária de querosene e uma vela. Há uma caixa de fósforo com um só fósforo em seu bolso. O que você acende primeiro.\n\
-            [ 1 ] luminária\n   [ 2 ] vela\n   [ 3 ] fósforo", 3) == 3;
+    [ 1 ] luminária\n   [ 2 ] vela\n   [ 3 ] fósforo", 3) == 3;
         case 4:
             return input("Um empresário comprou um cavalo de 10 moedas e vendeu por 20. Logo comprou o mesmo cavalo por 30 moedas e vendeu por 40. Qual é o lucro total do empresário nessas duas transações?\n\
-            [ 1 ] 10\n   [ 2 ] 20\n   [ 3 ] 40 ", 3) == 2;
+    [ 1 ] 10\n   [ 2 ] 20\n   [ 3 ] 40 ", 3) == 2;
         case 5:
             return input("Um balão aerostático é levado por uma corrente de ar até o sul. Em que direção vão ondular as bandeiras da cesta?\n\
-            [ 1 ] sul\n   [ 2 ] nenhuma\n   [ 3 ] norte", 3) == 2;
+    [ 1 ] sul\n   [ 2 ] nenhuma\n   [ 3 ] norte", 3) == 2;
         case 6:
             return input("Um homem roubou 80 moedas da caixa de um mercante. Mais tarde, usou 60 moedas para comprar uma espada do mercante, usando as moedas que roubou. Qual foi o prejuízo do mercante?\n\
-            [ 1 ] 80\n   [ 2 ] 20\n   [ 3 ] 140 ", 3) == 1;
+    [ 1 ] 80\n   [ 2 ] 20\n   [ 3 ] 140 ", 3) == 1;
         case 7:
             return input("Dois pais e dois filhos sentaram-se para comer ovos no café da manhã. Cada um comeu um ovo. Quantos ovos eles comeram no total?\n\
-            [ 1 ] 1\n   [ 2 ] 3\n   [ 3 ] 5 ", 3) == 2;
+    [ 1 ] 1\n   [ 2 ] 3\n   [ 3 ] 5 ", 3) == 2;
         case 8:
             return input("Se 3 lenhadores derrubam 3 árvores a cada 3 horas, quanto tempo levarão 100 lenhadores para derrubarem 100 árvores?\n\
-            [ 1 ] 100\n   [ 2 ] 3\n   [ 3 ] 300 ", 3) == 2;
+    [ 1 ] 100\n   [ 2 ] 3\n   [ 3 ] 300 ", 3) == 2;
         case 9:
             return input("Você está diante de três portas. Na primeira há um assassino. Na segunda há um leão que não come há um ano. Na terceira há um incêndio. Qual porta é mais segura?\n\
-            [ 1 ] assassino\n   [ 2 ] leão\n   [ 3 ] incêndio ", 3) == 2;
+    [ 1 ] assassino\n   [ 2 ] leão\n   [ 3 ] incêndio ", 3) == 2;
         case 0:
             return input("Há três baús, um contendo 100 moedas de ouro, um contendo 100 moedas de prata, e um contendo 50/50. Os rótulos estão trocados, porém. Você pode tirar uma moeda de um dos baús para identificar qual baú contém apenas moedas de ouro. De qual baú você retira a moeda?\n\
-            [ 1 ] só ouro\n   [ 2 ] só prata\n   [ 3 ] 50/50 ", 3) == 3;
+    [ 1 ] só ouro\n   [ 2 ] só prata\n   [ 3 ] 50/50 ", 3) == 3;
     }
 }
 
@@ -852,7 +858,7 @@ void render(Player player, int ** map, int size){
                         printf(" . ");
                         break;
                     case 1:
-                        printf(GRN " # " RST);
+                        printf(BLK GRNB " # " RST);
                         break;
                     case -1:
                         printf(YEL " @ " RST);
@@ -1050,9 +1056,6 @@ void walk(int x, int y, int ** grid, int size){
 
             // traduz as posições contíguas em coordenadas
             int next_x = neighbours[r] % size, next_y = neighbours[r] / size; 
-
-            // remove a parede
-            //grid[(next_x + x)/2][(y + next_y) / 2] = 0; 
 
             // remove as paredes
             for(int i = -1; i < 2; i++){
