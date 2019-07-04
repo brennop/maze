@@ -77,12 +77,13 @@ typedef struct{
 char message[100]; // Buffer de mensagens no estilo Rogue/Nethack
 bool isPlaying = false; // Variável para indicar se o jogo está rodando ou pausado
 
-int input(); // talvez vai morrer
+int input();
 
 int ** genMap(int size);
 void walk(int x, int y, int ** grid, int size);
 
-int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls);
+int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, int maxEnemies, int rounds, char * controls);
+void gameOver(Player player, int size, int round);
 
 int spawn(int ** grid, int size, int n, int type);
 void checkTraps(Player * player, int ** grid, bool isAuto);
@@ -99,11 +100,12 @@ void inventory(Player * player, char key);
 bool riddle(int n);
 bool bossFight(Player player, int ** map, int size);
 
-bool save(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls);
-bool load(Player * player, int *** map, int * size, Enemy * enemies, int * nenemies, char * controls);
+bool save(Player player, int ** map, int size, Enemy * enemies, int nenemies, int maxEnemies, int rounds, char * controls);
+bool load(Player * player, int *** map, int * size, Enemy * enemies, int * nenemies, int * maxEnemies, int * round, char * controls);
 
 Player create();
 Enemy createEnemy(Player player, int **map, int size);
+
 void config(char * controls);
 
 int main(int argc, char *argv[]){
@@ -112,9 +114,15 @@ int main(int argc, char *argv[]){
     // default input vector
     char controls[9] = {'A', 'B', 'C', 'D', 'c', 'i', 'e', 's','\0'};
     Player player;
-    Enemy enemies[10];
-    int nenemies, size, **map;
+    Enemy enemies[30];
+    int nenemies, size, **map, maxEnemies, round;
     bool saveExists = false;
+
+    char splash[] = "    #############\n    #    #      #\n    #  #####  ###\n    ###  ###  ###\n    #############\n    # #  ##  #  #\n    # #  ##    ##\n    ##   ##  #  #\n    #############\n    ";
+    system(CLEAR);
+    printf("%s", splash);
+
+    getch();
 
     FILE* savefile;
     if(savefile = fopen("maze.save", "r")){
@@ -138,16 +146,18 @@ int main(int argc, char *argv[]){
             case '1':
                 if(saveExists){
                     // if load then game
-                    load(&player, &map, &size, enemies, &nenemies, controls);
-                    game(player, map, size, enemies, nenemies, controls);
+                    load(&player, &map, &size, enemies, &nenemies, &maxEnemies, &round, controls);
+                    game(player, map, size, enemies, nenemies, maxEnemies, round, controls);
                 }
                 break;
             case '2':
                 size = input("    Dificuldade\n    [ 1 ] 30x30\n    [ 2 ] 50x50\n    [ 3 ] 90x90", 3);
+                maxEnemies = size * 10;
                 size = (size == 1) * 37 + (size == 2) * 57 + (size == 3) * 97;
                 player = create();
                 Enemy enemies[10];
                 nenemies = 0;
+                round = 0;
                 map = genMap(size);
 
                 spawn(map, size, size/4, 2);  // Spawn de size/4 armadilhas (representação 2)
@@ -164,10 +174,10 @@ int main(int argc, char *argv[]){
                 map[size - 1 - player.y][size - 1 - player.x] = -10;
                 
                 system(CLEAR);
-                printf("    Durante a festa real, pessoas beberam um pouco além da conta. O rei decidiu que seria uma boa ideia que todos fossem se aventurar no labirinto do castelo. A noite caiu e você está com muita dor de cabeça.\n\n [ x ] Continuar");
+                printf("    Durante a festa real, pessoas beberam um pouco além da conta. O rei decidiu que seria uma boa ideia que todos fossem se aventurar no labirinto do castelo. A noite caiu e você está com muita dor de cabeça.\n\n    [ x ] Continuar");
                 getch();
 
-                game(player, map, size, enemies, nenemies, controls);
+                game(player, map, size, enemies, nenemies, maxEnemies, round, controls);
                 break;
             case '3':
                 config(controls);
@@ -218,13 +228,13 @@ void config(char * controls){
         printf("    [ 6 ] Inventário - [ %c ]\n", controls[5]);
         printf("    [ 7 ] Atacar - [ %c ]\n", controls[6]);
         printf("    [ 8 ] Salvar - [ %c ]\n", controls[7]);
-        printf("\n[ x ] sair\n");
+        printf("\n    [ x ] sair\n");
 
         opt = getch();
 
         if(opt >  48 && opt < 57){
             system(CLEAR);
-            printf("Pressione a tecla desejada\n [ x ] cancelar");
+            printf("Pressione a tecla desejada\n    [ x ] cancelar");
             key = '[';
             while (key == '\033' || key == '['){
                 key = getch();
@@ -310,7 +320,7 @@ Player create(){
         }
 
         printf(" [ + ]\n\nPontos restantes: %2d", 10 - sum);
-        printf("\n[ x ] Continuar");
+        printf("\n    [ x ] Continuar");
 
         switch (opt = getch()){
             case 'x':
@@ -351,9 +361,9 @@ Player create(){
         p.constitution -= 1 * (p.constitution > 0);
     }
 
-    // HP é 5 * Constituição
+    // HP é 4 * Constituição
     // Se constiuição for zero, HP = 1
-    p.hp = p.constitution * 5 + !p.constitution;
+    p.hp = p.constitution * 4 + !p.constitution;
     p.maxhp = p.hp;
 
     // Deixa o inventário vazio
@@ -388,7 +398,7 @@ Enemy createEnemy(Player player, int **map, int size){
     return e;
 }
 
-int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, char * controls){
+int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, int maxEnemies, int round, char * controls){
     char opt;
 
     int timeToNextEnemy = 15;
@@ -399,8 +409,6 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
     for(int i = 0; i < size; i++){
         distMap[i] = (int*) malloc(size*sizeof(int));
     }
-
-    int round = 0;
 
     // Começa o jogo
     while(1){
@@ -419,7 +427,9 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
             for(int i = player.y-1; i <player.y+2; i++){
                 for(int j = player.x-1; j < player.x+2; j++){
                     if(map[i][j] == -10){
-                        return bossFight(player, map, size);
+                        bossFight(player, map, size);
+                        gameOver(player, round, size);
+                        return 0;
                     }
                 }
             }
@@ -429,7 +439,7 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
                 player.stronger--;
 
             // Spawn dos monstros
-            if(!(--timeToNextEnemy) && nenemies < 9){
+            if(timeToNextEnemy-- <= 0 && nenemies < maxEnemies){
                 enemies[nenemies++] = createEnemy(player, map, size);
                 timeToNextEnemy = 15 + rand() % 15;
             }
@@ -452,7 +462,7 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
             }else if(opt == controls[6]){
                 attack(player, enemies, nenemies, map);
             }else if(opt == controls[7]){
-                save(player, map, size, enemies, nenemies, controls);
+                save(player, map, size, enemies, nenemies, maxEnemies, round, controls);
             }
 
             // Atualiza as distâncias
@@ -483,9 +493,7 @@ int game(Player player, int ** map, int size, Enemy * enemies, int nenemies, cha
             round++;
 
             if(player.hp <= 0){
-                system(CLEAR);
-                printf(RED BLD "GAME OVER!" RST);
-                getch();
+                gameOver(player, round, size);
                 return 0;
             }
         }
@@ -617,7 +625,7 @@ void inventory(Player * player, char key){
                 strcpy(message, "usou " BLU "poção de potencialização" RST);
                 
                 // potencializa o player por x rounds
-                player->stronger = 50;
+                player->stronger = 70;
             }
 
             // remove o item do inventário
@@ -800,9 +808,7 @@ bool bossFight(Player player, int ** map, int size){
             i++;
         }
     }
-    system(CLEAR);
-    printf(RED BLD "GAME OVER!" RST);
-    getch();
+    
     return 0;
 }
 
@@ -812,35 +818,51 @@ bool riddle(int n){
     {
         case 1:
             return input("Quatro irmãs estão em um quarto: Ana está lendo, Kátia está jogando xadrez, Taca está cozinhando. O que a quarta irmã está fazendo?\n\
-    [ 1 ] matando orcs\n  [ 2 ] forjando uma espada\n   [ 3 ] jogando xadrez ", 3) == 3;
+    [ 1 ] matando orcs\n    [ 2 ] forjando uma espada\n    [ 3 ] jogando xadrez ", 3) == 3;
         case 2:
             return input("Um homem estava indo para a Bahia com suas 5 irmãs. Cada irmã carregava 5 caixas, cada caixa tinha 5 gatos, cada gato estava com 5 filhotes. Quantos estavam indo para a Bahia?\n\
-    [ 1 ] 756\n   [ 2 ] 781\n    [ 3 ] Bahia? ", 3) == 1;
+    [ 1 ] 756\n    [ 2 ] 781\n    [ 3 ] Bahia? ", 3) == 1;
         case 3:
             return input("Você entra em uma sala escura. No quarto há uma estufa à gás, uma luminária de querosene e uma vela. Há uma caixa de fósforo com um só fósforo em seu bolso. O que você acende primeiro.\n\
-    [ 1 ] luminária\n   [ 2 ] vela\n   [ 3 ] fósforo", 3) == 3;
+    [ 1 ] luminária\n    [ 2 ] vela\n    [ 3 ] fósforo", 3) == 3;
         case 4:
             return input("Um empresário comprou um cavalo de 10 moedas e vendeu por 20. Logo comprou o mesmo cavalo por 30 moedas e vendeu por 40. Qual é o lucro total do empresário nessas duas transações?\n\
-    [ 1 ] 10\n   [ 2 ] 20\n   [ 3 ] 40 ", 3) == 2;
+    [ 1 ] 10\n    [ 2 ] 20\n    [ 3 ] 40 ", 3) == 2;
         case 5:
             return input("Um balão aerostático é levado por uma corrente de ar até o sul. Em que direção vão ondular as bandeiras da cesta?\n\
-    [ 1 ] sul\n   [ 2 ] nenhuma\n   [ 3 ] norte", 3) == 2;
+    [ 1 ] sul\n    [ 2 ] nenhuma\n    [ 3 ] norte", 3) == 2;
         case 6:
             return input("Um homem roubou 80 moedas da caixa de um mercante. Mais tarde, usou 60 moedas para comprar uma espada do mercante, usando as moedas que roubou. Qual foi o prejuízo do mercante?\n\
-    [ 1 ] 80\n   [ 2 ] 20\n   [ 3 ] 140 ", 3) == 1;
+    [ 1 ] 80\n    [ 2 ] 20\n    [ 3 ] 140 ", 3) == 1;
         case 7:
             return input("Dois pais e dois filhos sentaram-se para comer ovos no café da manhã. Cada um comeu um ovo. Quantos ovos eles comeram no total?\n\
-    [ 1 ] 1\n   [ 2 ] 3\n   [ 3 ] 5 ", 3) == 2;
+    [ 1 ] 1\n    [ 2 ] 3\n    [ 3 ] 5 ", 3) == 2;
         case 8:
             return input("Se 3 lenhadores derrubam 3 árvores a cada 3 horas, quanto tempo levarão 100 lenhadores para derrubarem 100 árvores?\n\
-    [ 1 ] 100\n   [ 2 ] 3\n   [ 3 ] 300 ", 3) == 2;
+    [ 1 ] 100\n    [ 2 ] 3\n    [ 3 ] 300 ", 3) == 2;
         case 9:
             return input("Você está diante de três portas. Na primeira há um assassino. Na segunda há um leão que não come há um ano. Na terceira há um incêndio. Qual porta é mais segura?\n\
-    [ 1 ] assassino\n   [ 2 ] leão\n   [ 3 ] incêndio ", 3) == 2;
+    [ 1 ] assassino\n    [ 2 ] leão\n    [ 3 ] incêndio ", 3) == 2;
         case 0:
             return input("Há três baús, um contendo 100 moedas de ouro, um contendo 100 moedas de prata, e um contendo 50/50. Os rótulos estão trocados, porém. Você pode tirar uma moeda de um dos baús para identificar qual baú contém apenas moedas de ouro. De qual baú você retira a moeda?\n\
-    [ 1 ] só ouro\n   [ 2 ] só prata\n   [ 3 ] 50/50 ", 3) == 3;
+    [ 1 ] só ouro\n    [ 2 ] só prata\n    [ 3 ] 50/50 ", 3) == 3;
     }
+}
+
+void gameOver(Player player, int round, int size){
+    system(CLEAR);
+
+    if(player.hp > 0){
+        printf(GRN BLD"    GAME OVER!" RST);
+    }else{
+        printf(RED BLD"    GAME OVER!" RST);
+    }
+
+    printf(ITL "\n    Dificuldade: " "%.f", (size - 7) / 30.0);
+    printf(ITL "\n    Rounds:" RST " %d", round);
+    
+    strcpy(message, "\0");
+    getch();
 }
 
 void render(Player player, int ** map, int size){
@@ -852,39 +874,45 @@ void render(Player player, int ** map, int size){
         for(int j = player.x - 2; j <= player.x + 2; j++){
             
             if(i >= 0 && i < size && j >= 0 && j < size){
-                switch (map[i][j])
-                    {
-                    case 0:
-                        printf(" . ");
-                        break;
-                    case 1:
-                        printf(BLK GRNB " # " RST);
-                        break;
-                    case -1:
+                if(i == player.y && j == player.x){
+                    if(map[i][j] == -3 || map[i][j] == -4){
+                        printf(MAG " @\u034A\u0356 " RST);
+                    }else{
                         printf(YEL " @ " RST);
-                        break;
-                    case -2:
-                        printf(RED " x " RST);
-                        break;
-                    case 4:
-                        printf(GRN " o " RST);
-                        break;
-                    case 5:
-                        printf(CYN " o " RST);
-                        break;
-                    case -3:
-                        printf(MAG " k " RST);
-                        break;
-                    case -4:
-                        printf(BLU " k " RST);
-                        break;
-                    case -10:
-                        printf(BLD YEL " m " RST);
-                        break;
-                    default:
-                        printf(" . ");
-                        break;
                     }
+                    
+                }else{
+                    switch (map[i][j])
+                        {
+                        case 0:
+                            printf(" . ");
+                            break;
+                        case 1:
+                            printf(BLK GRNB " # " RST);
+                            break;
+                        case -2:
+                            printf(RED " x " RST);
+                            break;
+                        case 4:
+                            printf(GRN " o " RST);
+                            break;
+                        case 5:
+                            printf(CYN " o " RST);
+                            break;
+                        case -3:
+                            printf(MAG " k " RST);
+                            break;
+                        case -4:
+                            printf(BLU " k " RST);
+                            break;
+                        case -10:
+                            printf(BLD YEL " m " RST);
+                            break;
+                        default:
+                            printf(" . ");
+                            break;
+                    }
+                }
             }
             else{
                 printf("  ");
@@ -951,7 +979,7 @@ void render(Player player, int ** map, int size){
     }
 }
 
-bool save(Player player, int ** grid, int size, Enemy * enemies, int nenemies, char * controls){
+bool save(Player player, int ** grid, int size, Enemy * enemies, int nenemies, int maxEnemies, int round, char * controls){
     FILE* savefile;
     savefile = fopen("maze.save", "wb");
 
@@ -961,6 +989,8 @@ bool save(Player player, int ** grid, int size, Enemy * enemies, int nenemies, c
         fwrite(grid[i], sizeof(int), size, savefile);
     }
     fwrite(&nenemies, sizeof(int), 1, savefile);
+    fwrite(&maxEnemies, sizeof(int), 1, savefile);
+    fwrite(&round, sizeof(int), 1, savefile);
     fwrite(enemies, sizeof(Enemy), nenemies, savefile);
     fwrite(controls, sizeof(char), 9, savefile);
 
@@ -968,7 +998,7 @@ bool save(Player player, int ** grid, int size, Enemy * enemies, int nenemies, c
     strcpy(message, "Jogo Salvo");
 }
 
-bool load(Player * player, int *** grid, int * size, Enemy * enemies, int * nenemies, char * controls){
+bool load(Player * player, int *** grid, int * size, Enemy * enemies, int * nenemies, int * maxEnemies, int * round, char * controls){
     FILE* savefile;
     savefile = fopen("maze.save", "rb");
     
@@ -983,6 +1013,8 @@ bool load(Player * player, int *** grid, int * size, Enemy * enemies, int * nene
     }
     
     fread(nenemies, sizeof(int), 1, savefile);
+    fread(maxEnemies, sizeof(int), 1, savefile);
+    fread(round, sizeof(int), 1, savefile);
     fread(enemies, sizeof(Enemy), *nenemies, savefile);
     fread(controls, sizeof(char), 9, savefile);
 
