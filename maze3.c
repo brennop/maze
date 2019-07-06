@@ -6,9 +6,10 @@
 
 #define rows 33
 #define cols 33
-#define size 4
 
-void render(int grid[rows][cols], int t,int x, int y){
+int dirs[4] = {1,0,-1,0};
+
+void render(int grid[rows][cols], int t){
     system("clear");
     for(int i = 0; i < rows; i++){
         for(int j = 0; j < cols; j++){
@@ -57,51 +58,32 @@ void render2(int grid[rows][cols], int t, int x, int y){
 }
 
 void recursion(int x, int y, int grid[rows][cols]){
-    
-
-    for(int i = y-(size/2)+1; i < y+(size/2); i++){
-        for(int j = x-(size/2)+1; j < x+(size/2); j++){
+    for(int i = y-1; i < y+2; i++){
+        for(int j = x-1; j < x+2; j++){
             grid[j][i] = 0; // mark cells as visited
         }
     }
 
-    render(grid, 50, x, y);
+    int k;
+    do{
+        int neighbours[3];
+        k = 0;
 
-    for(int i = 0; i < 4; i++){
-        int neighbours[4];
-        int k = 0;
-
-        if(y - size > 0 && grid[x][y - size] != 0){ //up
-            neighbours[k] = x + rows * (y - size);
-            k++;
-        }
-        if(x - size > 0 && grid[x - size][y] != 0){ // left
-            neighbours[k] = x - size + rows * y;
-            k++;
-        }
-        if(y + size < rows -1 && grid[x][y + size] != 0){ // down
-            neighbours[k] = x + rows * (y + size);
-            k++;
-        }
-        if(x + size < cols -1 && grid[x + size][y] != 0){ // right
-            neighbours[k] = x + size + rows * y;
-            k++;
+        for(int j = 0; j < 4; j++){
+            if(grid[x + dirs[j]*4][y + dirs[(j+1)%4]*4])
+                neighbours[k++] = x + dirs[j]*4 + rows * (y + dirs[(j+1)%4]*4);
         }
     
-        if(k > 0){
+        if(k){
             int r = rand() % k;
-            int next_x = neighbours[r] % rows, next_y = neighbours[r] / rows;
-
-            for(int i = -size/2 + 1; i < size/2; i++){
-                for(int j = -size/2 + 1; j < size/2; j++){
-                    grid[(next_x + x)/2 + j][(y + next_y)/2 + i] =0;
+            for(int i = -1; i < 2; i++){
+                for(int j = -1; j < 2; j++){
+                    grid[(neighbours[r] % rows + x)/2 + j][( neighbours[r] / rows + y)/2 + i] =0;
                 }
             }
-            //grid[(next_x + x)/2][(y + next_y) / 2] = 0; // remove wall;
-
-            recursion(next_x, next_y, grid);
+            recursion(neighbours[r] % rows,  neighbours[r] / rows, grid);
         }
-    }
+    }while(k != 0);
 }
 
 void path(int x, int y, int distMap[rows][cols], int dis){
@@ -144,38 +126,29 @@ int main(){
     int grid[rows][cols];
     int dist[rows][cols];
 
-    for(int i = 0; i < rows; i++){
-        for(int j = 0; j < cols; j++){
-            if(i < 2 || i > rows-3 || j < 2 || j > rows-3){
-                grid[i][j] = 0;
-            }else{
-                grid[i][j] = 1;
-            }
-        }
-    }
-
-    int x = rows/3, y = cols/3;
+    clock_t start, stop;
+    double perf = 0.0;
+    int times = 100000;
     srand(time(NULL));
 
-    
-
-    recursion(size,size,grid);
-
-    for(int i = 0; i < rows; i++){
-        for(int j = 0; j < cols; j++){
-            if(grid[i][j] == 1){
-                dist[i][j] = __INT_MAX__;
-            }else{
-                dist[i][j] = 0;
+    for(int t = 0; t < times; t++){
+        for(int i = 0; i < rows; i++){
+            for(int j = 0; j < cols; j++){
+                if(i < 2 || i > rows-3 || j < 2 || j > rows-3){
+                    grid[i][j] = 0;
+                }else{
+                    grid[i][j] = 1;
+                }
             }
         }
+
+        start = clock();
+        recursion(4,4,grid);
+        stop = clock();
+        perf += (double) (stop-start);
     }
-    
-    path(rows/2,cols/2, dist,1);
-    //render2(dist,10, 4,4);
-
-    
-
+    render(grid, 50);
+    printf("%lf\n", perf/times);
     return 0;
 
 }
